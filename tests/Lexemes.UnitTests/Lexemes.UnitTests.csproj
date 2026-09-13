@@ -18,6 +18,6 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\ExampleLib\ExampleLib.csproj" />
+    <ProjectReference Include="..\..\src\Lexemes\Lexemes.csproj" />
   </ItemGroup>
 </Project>
