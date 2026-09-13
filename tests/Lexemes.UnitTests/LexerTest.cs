@@ -16,6 +16,15 @@ public class LexerTest
     }
 
     [Theory]
+    [MemberData(nameof(GetTokenizeIntLiteralsData))]
+    public void Can_tokenize_integer_literals(string code, List<Token> expected)
+    {
+        List<Token> actual = Tokenize(code);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
     [MemberData(nameof(GetEndOfFileData))]
     public void Parse_token_returns_end_of_file(string code, int tokenCount)
     {
@@ -141,6 +150,45 @@ public class LexerTest
             {
                 "int value",
                 2
+            },
+        };
+    }
+
+    public static TheoryData<string, List<Token>> GetTokenizeIntLiteralsData()
+    {
+        return new TheoryData<string, List<Token>>
+        {
+            {
+                "0",
+                [
+                    new Token(TokenType.IntLiteral, 0),
+                ]
+            },
+            {
+                "7 1250",
+                [
+                    new Token(TokenType.IntLiteral, 7),
+                    new Token(TokenType.IntLiteral, 1250),
+                ]
+            },
+            {
+                "2147483647",
+                [
+                    new Token(TokenType.IntLiteral, 2147483647),
+                ]
+            },
+            {
+                "00 007",
+                [
+                    new Token(TokenType.Error, "00"),
+                    new Token(TokenType.Error, "007"),
+                ]
+            },
+            {
+                "2147483648",
+                [
+                    new Token(TokenType.Error, "2147483648"),
+                ]
             },
         };
     }

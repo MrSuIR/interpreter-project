@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace Lait.Lexemes;
@@ -49,8 +50,41 @@ public class Lexer
             return ParseIdentifierOrKeyword();
         }
 
+        if (char.IsAsciiDigit(current))
+        {
+            return ParseIntLiteral();
+        }
+
         _scanner.Advance();
         return new Token(TokenType.Error, current.ToString());
+    }
+
+    /// <summary>
+    /// Разбирает целочисленный литерал.
+    /// </summary>
+    private Token ParseIntLiteral()
+    {
+        StringBuilder digitsBuilder = new();
+
+        for (
+            char current = _scanner.Peek(); char.IsAsciiDigit(current); current = _scanner.Peek())
+        {
+            digitsBuilder.Append(current);
+            _scanner.Advance();
+        }
+
+        string digits = digitsBuilder.ToString();
+        if (digits.Length > 1 && digits[0] == '0')
+        {
+            return new Token(TokenType.Error, digits);
+        }
+
+        if (int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out int value))
+        {
+            return new Token(TokenType.IntLiteral, value);
+        }
+
+        return new Token(TokenType.Error, digits);
     }
 
     /// <summary>
