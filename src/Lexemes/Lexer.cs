@@ -45,7 +45,11 @@ public class Lexer
     /// </summary>
     public Token ParseToken()
     {
-        SkipWhiteSpaces();
+        Token? commentError = SkipWhiteSpacesAndComments();
+        if (commentError is not null)
+        {
+            return commentError;
+        }
 
         if (_scanner.IsEnd())
         {
@@ -312,6 +316,79 @@ public class Lexer
         }
 
         return new Token(TokenType.Identifier, value);
+    }
+
+    /// <summary>
+    /// Пропускает пробельные символы и комментарии до начала следующей лексемы.
+    /// </summary>
+    private Token? SkipWhiteSpacesAndComments()
+    {
+        while (true)
+        {
+            SkipWhiteSpaces();
+
+            if (_scanner.Peek() == '/' && _scanner.Peek(1) == '/')
+            {
+                SkipSingleLineComment();
+                continue;
+            }
+
+            if (_scanner.Peek() == '/' && _scanner.Peek(1) == '*')
+            {
+                Token? error = SkipMultiLineComment();
+                if (error is not null)
+                {
+                    return error;
+                }
+
+                continue;
+            }
+
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Пропускает однострочный комментарий до переноса строки или конца текста.
+    /// </summary>
+    private void SkipSingleLineComment()
+    {
+        // Пропускаем начало комментария.
+        _scanner.Advance();
+        _scanner.Advance();
+
+        while (!_scanner.IsEnd() && _scanner.Peek() is not '\n' and not '\r')
+        {
+            _scanner.Advance();
+        }
+    }
+
+    /// <summary>
+    /// Пропускает многострочный комментарий или возвращает ошибку, если комментарий не завершён.
+    /// </summary>
+    private Token? SkipMultiLineComment()
+    {
+        StringBuilder commentBuilder = new();
+
+        commentBuilder.Append('/');
+        _scanner.Advance();
+        commentBuilder.Append('*');
+        _scanner.Advance();
+
+        while (!_scanner.IsEnd())
+        {
+            if (_scanner.Peek() == '*' && _scanner.Peek(1) == '/')
+            {
+                _scanner.Advance();
+                _scanner.Advance();
+                return null;
+            }
+
+            commentBuilder.Append(_scanner.Peek());
+            _scanner.Advance();
+        }
+
+        return new Token(TokenType.Error, commentBuilder.ToString());
     }
 
     /// <summary>

@@ -34,6 +34,15 @@ public class LexerTest
     }
 
     [Theory]
+    [MemberData(nameof(GetSkipCommentsData))]
+    public void Can_skip_comments(string code, List<Token> expected)
+    {
+        List<Token> actual = Tokenize(code);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
     [MemberData(nameof(GetTokenizeOperatorsAndPunctuationData))]
     public void Can_tokenize_operators_and_punctuation(string code, List<Token> expected)
     {
@@ -168,6 +177,22 @@ public class LexerTest
             {
                 "int value",
                 2
+            },
+            {
+                "// comment",
+                0
+            },
+            {
+                "/* comment */",
+                0
+            },
+            {
+                " \t/* first */\n// second",
+                0
+            },
+            {
+                "/* unfinished",
+                1
             },
         };
     }
@@ -382,6 +407,87 @@ public class LexerTest
                 [
                     new Token(TokenType.Minus),
                     new Token(TokenType.IntLiteral, 15),
+                ]
+            },
+        };
+    }
+
+    public static TheoryData<string, List<Token>> GetSkipCommentsData()
+    {
+        return new TheoryData<string, List<Token>>
+        {
+            {
+                "first // comment\nsecond",
+                [
+                    new Token(TokenType.Identifier, "first"),
+                    new Token(TokenType.Identifier, "second"),
+                ]
+            },
+            {
+                "first // comment\rsecond",
+                [
+                    new Token(TokenType.Identifier, "first"),
+                    new Token(TokenType.Identifier, "second"),
+                ]
+            },
+            {
+                "first // comment",
+                [
+                    new Token(TokenType.Identifier, "first"),
+                ]
+            },
+            {
+                "//",
+                []
+            },
+            {
+                "first /* comment */ second",
+                [
+                    new Token(TokenType.Identifier, "first"),
+                    new Token(TokenType.Identifier, "second"),
+                ]
+            },
+            {
+                "first /* line one\nline two */ second",
+                [
+                    new Token(TokenType.Identifier, "first"),
+                    new Token(TokenType.Identifier, "second"),
+                ]
+            },
+            {
+                "/* first */ value */",
+                [
+                    new Token(TokenType.Identifier, "value"),
+                    new Token(TokenType.Multiply),
+                    new Token(TokenType.Divide),
+                ]
+            },
+            {
+                " \t/* first */\n// second\r/* third */ value",
+                [
+                    new Token(TokenType.Identifier, "value"),
+                ]
+            },
+            {
+                "left/right // comment\nnext/* comment */last",
+                [
+                    new Token(TokenType.Identifier, "left"),
+                    new Token(TokenType.Divide),
+                    new Token(TokenType.Identifier, "right"),
+                    new Token(TokenType.Identifier, "next"),
+                    new Token(TokenType.Identifier, "last"),
+                ]
+            },
+            {
+                "/* outer /* inner */ value",
+                [
+                    new Token(TokenType.Identifier, "value"),
+                ]
+            },
+            {
+                "/* unfinished",
+                [
+                    new Token(TokenType.Error, "/* unfinished"),
                 ]
             },
         };
