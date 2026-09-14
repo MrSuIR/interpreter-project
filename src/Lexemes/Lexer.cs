@@ -41,6 +41,15 @@ public class Lexer
     }
 
     /// <summary>
+    /// Создаёт лексер, загрузив исходный файл целиком в память.
+    /// </summary>
+    public static Lexer FromFile(string path)
+    {
+        string code = File.ReadAllText(path);
+        return new Lexer(code);
+    }
+
+    /// <summary>
     /// Возвращает следующий токен исходного текста.
     /// </summary>
     public Token ParseToken()

@@ -6,6 +6,46 @@ namespace Lait.Lexemes.UnitTests;
 
 public class LexerTest
 {
+    [Fact]
+    public void Can_tokenize_source_file()
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, "TestData", "program.lait");
+        List<Token> expected =
+        [
+            new Token(TokenType.Func),
+            new Token(TokenType.Identifier, "main"),
+            new Token(TokenType.OpenParenthesis),
+            new Token(TokenType.CloseParenthesis),
+            new Token(TokenType.Colon),
+            new Token(TokenType.Void),
+            new Token(TokenType.OpenBrace),
+            new Token(TokenType.String),
+            new Token(TokenType.Identifier, "message"),
+            new Token(TokenType.Assign),
+            new Token(TokenType.StringLiteral, "Привет\nLait"),
+            new Token(TokenType.Semicolon),
+            new Token(TokenType.Identifier, "print"),
+            new Token(TokenType.OpenParenthesis),
+            new Token(TokenType.Identifier, "message"),
+            new Token(TokenType.CloseParenthesis),
+            new Token(TokenType.Semicolon),
+            new Token(TokenType.CloseBrace),
+        ];
+
+        List<Token> actual = Tokenize(Lexer.FromFile(path));
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void From_file_throws_when_file_does_not_exist()
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, "TestData", "missing.lait");
+        Action action = () => Lexer.FromFile(path);
+
+        Assert.Throws<FileNotFoundException>(action);
+    }
+
     [Theory]
     [MemberData(nameof(GetTokenizeIdentifiersAndKeywordsData))]
     public void Can_tokenize_identifiers_and_keywords(string code, List<Token> expected)
@@ -495,8 +535,13 @@ public class LexerTest
 
     private static List<Token> Tokenize(string code)
     {
-        List<Token> results = [];
         Lexer lexer = new(code);
+        return Tokenize(lexer);
+    }
+
+    private static List<Token> Tokenize(Lexer lexer)
+    {
+        List<Token> results = [];
 
         for (
             Token token = lexer.ParseToken();
