@@ -55,8 +55,129 @@ public class Lexer
             return ParseIntLiteral();
         }
 
-        _scanner.Advance();
-        return new Token(TokenType.Error, current.ToString());
+        // Разбираем операторы, скобки и разделители.
+        switch (current)
+        {
+            case '+':
+                _scanner.Advance();
+                return new Token(TokenType.Plus);
+
+            case '-':
+                _scanner.Advance();
+                return new Token(TokenType.Minus);
+
+            case '*':
+                _scanner.Advance();
+                return new Token(TokenType.Multiply);
+
+            case '/':
+                _scanner.Advance();
+                return new Token(TokenType.Divide);
+
+            case '=':
+                _scanner.Advance();
+                if (_scanner.Peek() == '=')
+                {
+                    _scanner.Advance();
+                    return new Token(TokenType.Equal);
+                }
+
+                return new Token(TokenType.Assign);
+
+            case '!':
+                _scanner.Advance();
+                if (_scanner.Peek() == '=')
+                {
+                    _scanner.Advance();
+                    return new Token(TokenType.NotEqual);
+                }
+
+                return new Token(TokenType.Not);
+
+            case '<':
+                _scanner.Advance();
+                if (_scanner.Peek() == '=')
+                {
+                    _scanner.Advance();
+                    return new Token(TokenType.LessThanOrEqual);
+                }
+
+                return new Token(TokenType.LessThan);
+
+            case '>':
+                _scanner.Advance();
+                if (_scanner.Peek() == '=')
+                {
+                    _scanner.Advance();
+                    return new Token(TokenType.GreaterThanOrEqual);
+                }
+
+                return new Token(TokenType.GreaterThan);
+
+            case '&':
+                _scanner.Advance();
+                if (_scanner.Peek() == '&')
+                {
+                    _scanner.Advance();
+                    return new Token(TokenType.And);
+                }
+
+                return new Token(TokenType.Error, current.ToString());
+
+            case '|':
+                _scanner.Advance();
+                if (_scanner.Peek() == '|')
+                {
+                    _scanner.Advance();
+                    return new Token(TokenType.Or);
+                }
+
+                return new Token(TokenType.Error, current.ToString());
+
+            case '.':
+                _scanner.Advance();
+                return new Token(TokenType.Dot);
+
+            case '(':
+                _scanner.Advance();
+                return new Token(TokenType.OpenParenthesis);
+
+            case ')':
+                _scanner.Advance();
+                return new Token(TokenType.CloseParenthesis);
+
+            case '{':
+                _scanner.Advance();
+                return new Token(TokenType.OpenBrace);
+
+            case '}':
+                _scanner.Advance();
+                return new Token(TokenType.CloseBrace);
+
+            case '[':
+                _scanner.Advance();
+                return new Token(TokenType.OpenBracket);
+
+            case ']':
+                _scanner.Advance();
+                return new Token(TokenType.CloseBracket);
+
+            case ',':
+                _scanner.Advance();
+                return new Token(TokenType.Comma);
+
+            case ':':
+                _scanner.Advance();
+                return new Token(TokenType.Colon);
+
+            case ';':
+                _scanner.Advance();
+                return new Token(TokenType.Semicolon);
+
+            default:
+                _scanner.Advance();
+                return new Token(TokenType.Error, current.ToString());
+        }
     }
 
     /// <summary>

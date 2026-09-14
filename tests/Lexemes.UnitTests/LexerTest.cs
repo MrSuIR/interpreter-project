@@ -25,6 +25,15 @@ public class LexerTest
     }
 
     [Theory]
+    [MemberData(nameof(GetTokenizeOperatorsAndPunctuationData))]
+    public void Can_tokenize_operators_and_punctuation(string code, List<Token> expected)
+    {
+        List<Token> actual = Tokenize(code);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
     [MemberData(nameof(GetEndOfFileData))]
     public void Parse_token_returns_end_of_file(string code, int tokenCount)
     {
@@ -188,6 +197,101 @@ public class LexerTest
                 "2147483648",
                 [
                     new Token(TokenType.Error, "2147483648"),
+                ]
+            },
+        };
+    }
+
+    public static TheoryData<string, List<Token>> GetTokenizeOperatorsAndPunctuationData()
+    {
+        return new TheoryData<string, List<Token>>
+        {
+            {
+                "+ - * /",
+                [
+                    new Token(TokenType.Plus),
+                    new Token(TokenType.Minus),
+                    new Token(TokenType.Multiply),
+                    new Token(TokenType.Divide),
+                ]
+            },
+            {
+                "= == != !",
+                [
+                    new Token(TokenType.Assign),
+                    new Token(TokenType.Equal),
+                    new Token(TokenType.NotEqual),
+                    new Token(TokenType.Not),
+                ]
+            },
+            {
+                "< <= > >=",
+                [
+                    new Token(TokenType.LessThan),
+                    new Token(TokenType.LessThanOrEqual),
+                    new Token(TokenType.GreaterThan),
+                    new Token(TokenType.GreaterThanOrEqual),
+                ]
+            },
+            {
+                "&& || .",
+                [
+                    new Token(TokenType.And),
+                    new Token(TokenType.Or),
+                    new Token(TokenType.Dot),
+                ]
+            },
+            {
+                "=== !== <<=",
+                [
+                    new Token(TokenType.Equal),
+                    new Token(TokenType.Assign),
+                    new Token(TokenType.NotEqual),
+                    new Token(TokenType.Assign),
+                    new Token(TokenType.LessThan),
+                    new Token(TokenType.LessThanOrEqual),
+                ]
+            },
+            {
+                "& |",
+                [
+                    new Token(TokenType.Error, "&"),
+                    new Token(TokenType.Error, "|"),
+                ]
+            },
+            {
+                "(){}[]",
+                [
+                    new Token(TokenType.OpenParenthesis),
+                    new Token(TokenType.CloseParenthesis),
+                    new Token(TokenType.OpenBrace),
+                    new Token(TokenType.CloseBrace),
+                    new Token(TokenType.OpenBracket),
+                    new Token(TokenType.CloseBracket),
+                ]
+            },
+            {
+                ",:;",
+                [
+                    new Token(TokenType.Comma),
+                    new Token(TokenType.Colon),
+                    new Token(TokenType.Semicolon),
+                ]
+            },
+            {
+                "value=10;",
+                [
+                    new Token(TokenType.Identifier, "value"),
+                    new Token(TokenType.Assign),
+                    new Token(TokenType.IntLiteral, 10),
+                    new Token(TokenType.Semicolon),
+                ]
+            },
+            {
+                "-15",
+                [
+                    new Token(TokenType.Minus),
+                    new Token(TokenType.IntLiteral, 15),
                 ]
             },
         };
