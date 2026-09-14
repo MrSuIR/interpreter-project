@@ -92,6 +92,15 @@ public class LexerTest
     }
 
     [Theory]
+    [MemberData(nameof(GetTokenizeProgramFragmentsData))]
+    public void Can_tokenize_program_fragments(string code, List<Token> expected)
+    {
+        List<Token> actual = Tokenize(code);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
     [MemberData(nameof(GetEndOfFileData))]
     public void Parse_token_returns_end_of_file(string code, int tokenCount)
     {
@@ -528,6 +537,104 @@ public class LexerTest
                 "/* unfinished",
                 [
                     new Token(TokenType.Error, "/* unfinished"),
+                ]
+            },
+        };
+    }
+
+    public static TheoryData<string, List<Token>> GetTokenizeProgramFragmentsData()
+    {
+        return new TheoryData<string, List<Token>>
+        {
+            {
+                """
+                func add(left: int, right: int): int {
+                    return left + right;
+                }
+                """,
+                [
+                    new Token(TokenType.Func),
+                    new Token(TokenType.Identifier, "add"),
+                    new Token(TokenType.OpenParenthesis),
+                    new Token(TokenType.Identifier, "left"),
+                    new Token(TokenType.Colon),
+                    new Token(TokenType.Int),
+                    new Token(TokenType.Comma),
+                    new Token(TokenType.Identifier, "right"),
+                    new Token(TokenType.Colon),
+                    new Token(TokenType.Int),
+                    new Token(TokenType.CloseParenthesis),
+                    new Token(TokenType.Colon),
+                    new Token(TokenType.Int),
+                    new Token(TokenType.OpenBrace),
+                    new Token(TokenType.Return),
+                    new Token(TokenType.Identifier, "left"),
+                    new Token(TokenType.Plus),
+                    new Token(TokenType.Identifier, "right"),
+                    new Token(TokenType.Semicolon),
+                    new Token(TokenType.CloseBrace),
+                ]
+            },
+            {
+                """
+                if (value >= 10 && value != 20) {
+                    print("ok");
+                } else {
+                    print("not ok");
+                }
+                """,
+                [
+                    new Token(TokenType.If),
+                    new Token(TokenType.OpenParenthesis),
+                    new Token(TokenType.Identifier, "value"),
+                    new Token(TokenType.GreaterThanOrEqual),
+                    new Token(TokenType.IntLiteral, 10),
+                    new Token(TokenType.And),
+                    new Token(TokenType.Identifier, "value"),
+                    new Token(TokenType.NotEqual),
+                    new Token(TokenType.IntLiteral, 20),
+                    new Token(TokenType.CloseParenthesis),
+                    new Token(TokenType.OpenBrace),
+                    new Token(TokenType.Identifier, "print"),
+                    new Token(TokenType.OpenParenthesis),
+                    new Token(TokenType.StringLiteral, "ok"),
+                    new Token(TokenType.CloseParenthesis),
+                    new Token(TokenType.Semicolon),
+                    new Token(TokenType.CloseBrace),
+                    new Token(TokenType.Else),
+                    new Token(TokenType.OpenBrace),
+                    new Token(TokenType.Identifier, "print"),
+                    new Token(TokenType.OpenParenthesis),
+                    new Token(TokenType.StringLiteral, "not ok"),
+                    new Token(TokenType.CloseParenthesis),
+                    new Token(TokenType.Semicolon),
+                    new Token(TokenType.CloseBrace),
+                ]
+            },
+            {
+                """
+                while (items[index].active) {
+                    index = index + 1; // Следующий элемент.
+                }
+                """,
+                [
+                    new Token(TokenType.While),
+                    new Token(TokenType.OpenParenthesis),
+                    new Token(TokenType.Identifier, "items"),
+                    new Token(TokenType.OpenBracket),
+                    new Token(TokenType.Identifier, "index"),
+                    new Token(TokenType.CloseBracket),
+                    new Token(TokenType.Dot),
+                    new Token(TokenType.Identifier, "active"),
+                    new Token(TokenType.CloseParenthesis),
+                    new Token(TokenType.OpenBrace),
+                    new Token(TokenType.Identifier, "index"),
+                    new Token(TokenType.Assign),
+                    new Token(TokenType.Identifier, "index"),
+                    new Token(TokenType.Plus),
+                    new Token(TokenType.IntLiteral, 1),
+                    new Token(TokenType.Semicolon),
+                    new Token(TokenType.CloseBrace),
                 ]
             },
         };
