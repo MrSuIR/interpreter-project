@@ -25,6 +25,14 @@ public class Lexer
         { "while", TokenType.While },
     };
 
+    private static readonly Dictionary<char, char> EscapeSequences = new()
+    {
+        { 'n', '\n' },
+        { 't', '\t' },
+        { '"', '"' },
+        { '\\', '\\' },
+    };
+
     private readonly TextScanner _scanner;
 
     public Lexer(string code)
@@ -53,6 +61,11 @@ public class Lexer
         if (char.IsAsciiDigit(current))
         {
             return ParseIntLiteral();
+        }
+
+        if (current == '"')
+        {
+            return ParseStringLiteral();
         }
 
         // Разбираем операторы, скобки и разделители.
@@ -177,6 +190,74 @@ public class Lexer
             default:
                 _scanner.Advance();
                 return new Token(TokenType.Error, current.ToString());
+        }
+    }
+
+    /// <summary>
+    /// Разбирает строковый литерал и декодирует разрешённые escape-последовательности.
+    /// </summary>
+    private Token ParseStringLiteral()
+    {
+        StringBuilder valueBuilder = new();
+        bool hasError = false;
+
+        // Пропускаем открывающую кавычку.
+        _scanner.Advance();
+
+        while (!_scanner.IsEnd() && _scanner.Peek() != '"')
+        {
+            char current = _scanner.Peek();
+            if (current == '\\')
+            {
+                ParseEscapeSequence(valueBuilder, ref hasError);
+                continue;
+            }
+
+            if (char.IsControl(current))
+            {
+                hasError = true;
+            }
+
+            valueBuilder.Append(current);
+            _scanner.Advance();
+        }
+
+        if (_scanner.IsEnd())
+        {
+            return new Token(TokenType.Error, valueBuilder.ToString());
+        }
+
+        // Пропускаем закрывающую кавычку.
+        _scanner.Advance();
+
+        return hasError
+            ? new Token(TokenType.Error, valueBuilder.ToString())
+            : new Token(TokenType.StringLiteral, valueBuilder.ToString());
+    }
+
+    /// <summary>
+    /// Декодирует escape-последовательность или сохраняет неизвестную последовательность как ошибочную.
+    /// </summary>
+    private void ParseEscapeSequence(StringBuilder valueBuilder, ref bool hasError)
+    {
+        // Пропускаем обратную косую черту.
+        _scanner.Advance();
+
+        char escaped = _scanner.Peek();
+        if (EscapeSequences.TryGetValue(escaped, out char decoded))
+        {
+            valueBuilder.Append(decoded);
+            _scanner.Advance();
+            return;
+        }
+
+        hasError = true;
+        valueBuilder.Append('\\');
+
+        if (!_scanner.IsEnd())
+        {
+            valueBuilder.Append(escaped);
+            _scanner.Advance();
         }
     }
 

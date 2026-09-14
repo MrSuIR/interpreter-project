@@ -25,6 +25,15 @@ public class LexerTest
     }
 
     [Theory]
+    [MemberData(nameof(GetTokenizeStringLiteralsData))]
+    public void Can_tokenize_string_literals(string code, List<Token> expected)
+    {
+        List<Token> actual = Tokenize(code);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
     [MemberData(nameof(GetTokenizeOperatorsAndPunctuationData))]
     public void Can_tokenize_operators_and_punctuation(string code, List<Token> expected)
     {
@@ -197,6 +206,87 @@ public class LexerTest
                 "2147483648",
                 [
                     new Token(TokenType.Error, "2147483648"),
+                ]
+            },
+        };
+    }
+
+    public static TheoryData<string, List<Token>> GetTokenizeStringLiteralsData()
+    {
+        return new TheoryData<string, List<Token>>
+        {
+            {
+                "\"\" \"Lait\"",
+                [
+                    new Token(TokenType.StringLiteral, string.Empty),
+                    new Token(TokenType.StringLiteral, "Lait"),
+                ]
+            },
+            {
+                "\"Привет, Lait!\"",
+                [
+                    new Token(TokenType.StringLiteral, "Привет, Lait!"),
+                ]
+            },
+            {
+                "\"First line\\nSecond line\"",
+                [
+                    new Token(TokenType.StringLiteral, "First line\nSecond line"),
+                ]
+            },
+            {
+                "\"a\\tb\"",
+                [
+                    new Token(TokenType.StringLiteral, "a\tb"),
+                ]
+            },
+            {
+                "\"Say \\\"Hello\\\"\"",
+                [
+                    new Token(TokenType.StringLiteral, "Say \"Hello\""),
+                ]
+            },
+            {
+                "\"C:\\\\code\"",
+                [
+                    new Token(TokenType.StringLiteral, "C:\\code"),
+                ]
+            },
+            {
+                "\"// /* */\"",
+                [
+                    new Token(TokenType.StringLiteral, "// /* */"),
+                ]
+            },
+            {
+                "\"\\q\"",
+                [
+                    new Token(TokenType.Error, "\\q"),
+                ]
+            },
+            {
+                "\"Lait",
+                [
+                    new Token(TokenType.Error, "Lait"),
+                ]
+            },
+            {
+                "\"First\nSecond\"",
+                [
+                    new Token(TokenType.Error, "First\nSecond"),
+                ]
+            },
+            {
+                "\"a\u0001b\"",
+                [
+                    new Token(TokenType.Error, "a\u0001b"),
+                ]
+            },
+            {
+                "\"first\"\"second\"",
+                [
+                    new Token(TokenType.StringLiteral, "first"),
+                    new Token(TokenType.StringLiteral, "second"),
                 ]
             },
         };
