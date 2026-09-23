@@ -48,52 +48,12 @@ public class LexerTest
 
     [Theory]
     [MemberData(nameof(GetTokenizeIdentifiersAndKeywordsData))]
-    public void Can_tokenize_identifiers_and_keywords(string code, List<Token> expected)
-    {
-        List<Token> actual = Tokenize(code);
-
-        Assert.Equal(expected, actual);
-    }
-
-    [Theory]
     [MemberData(nameof(GetTokenizeIntLiteralsData))]
-    public void Can_tokenize_integer_literals(string code, List<Token> expected)
-    {
-        List<Token> actual = Tokenize(code);
-
-        Assert.Equal(expected, actual);
-    }
-
-    [Theory]
     [MemberData(nameof(GetTokenizeStringLiteralsData))]
-    public void Can_tokenize_string_literals(string code, List<Token> expected)
-    {
-        List<Token> actual = Tokenize(code);
-
-        Assert.Equal(expected, actual);
-    }
-
-    [Theory]
     [MemberData(nameof(GetSkipCommentsData))]
-    public void Can_skip_comments(string code, List<Token> expected)
-    {
-        List<Token> actual = Tokenize(code);
-
-        Assert.Equal(expected, actual);
-    }
-
-    [Theory]
     [MemberData(nameof(GetTokenizeOperatorsAndPunctuationData))]
-    public void Can_tokenize_operators_and_punctuation(string code, List<Token> expected)
-    {
-        List<Token> actual = Tokenize(code);
-
-        Assert.Equal(expected, actual);
-    }
-
-    [Theory]
     [MemberData(nameof(GetTokenizeProgramFragmentsData))]
-    public void Can_tokenize_program_fragments(string code, List<Token> expected)
+    public void Can_tokenize_lexemes(string code, List<Token> expected)
     {
         List<Token> actual = Tokenize(code);
 
