@@ -305,6 +305,12 @@ public class LexerTest
                 ]
             },
             {
+                "\"abc\\",
+                [
+                    new Token(TokenType.Error, "abc\\"),
+                ]
+            },
+            {
                 "\"First\nSecond\"",
                 [
                     new Token(TokenType.Error, "First\nSecond"),
