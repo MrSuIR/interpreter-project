@@ -1,8 +1,12 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Lexemes/Lexemes.csproj" />
+    <Project Path="src/Runtime/Runtime.csproj" />
+    <Project Path="src/Parsing/Parsing.csproj" />
+    <Project Path="src/Interpreter/Interpreter.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Lexemes.UnitTests/Lexemes.UnitTests.csproj" />
+    <Project Path="tests/Interpreter.UnitTests/Interpreter.UnitTests.csproj" />
   </Folder>
 </Solution>
