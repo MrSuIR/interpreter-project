@@ -1,27 +1,31 @@
+﻿using System.Globalization;
+
 using Lait.Lexemes;
-using Lait.Runtime;
 
 namespace Lait.Parsing;
 
 /// <summary>
-/// Рекурсивный спуск по EBNF из спецификации. Инструкции VM создаются без AST.
+/// Рекурсивный спуск по EBNF с непосредственным выполнением выражений.
 /// </summary>
 public class Parser
 {
     private const int MaximumNesting = 256;
     private readonly Lexer _lexer;
-    private readonly List<Instruction> _instructions = new();
+    private readonly TextReader _input;
+    private readonly TextWriter _output;
     private Token _current = new(TokenType.EndOfFile);
     private int _tokenNumber;
     private int _nesting;
     private bool _started;
 
-    public Parser(Lexer lexer)
+    public Parser(Lexer lexer, TextReader input, TextWriter output)
     {
         _lexer = lexer;
+        _input = input;
+        _output = output;
     }
 
-    public IReadOnlyList<Instruction> ParseProgram()
+    public void ParseProgram()
     {
         if (_started)
         {
@@ -44,7 +48,6 @@ public class Parser
 
         Expect(TokenType.CloseBrace);
         Expect(TokenType.EndOfFile);
-        return _instructions.AsReadOnly();
     }
 
     private void ParseStatement()
@@ -56,7 +59,6 @@ public class Parser
         else
         {
             ParseExpression();
-            Emit(Operation.Discard);
         }
 
         Expect(TokenType.Semicolon);
@@ -66,41 +68,51 @@ public class Parser
     {
         ExpectIdentifier("print");
         Expect(TokenType.OpenParenthesis);
-        ParseExpression();
+        int value = ParseExpression();
         Expect(TokenType.CloseParenthesis);
-        Emit(Operation.Print);
+        if (_current.Type != TokenType.Semicolon)
+        {
+            throw SyntaxError("Ожидалась точка с запятой.");
+        }
+
+        _output.WriteLine(value.ToString(CultureInfo.InvariantCulture));
+        _output.Flush();
     }
 
-    private void ParseExpression()
+    private int ParseExpression()
     {
-        ParseAdditiveExpression();
+        return ParseAdditiveExpression();
     }
 
-    private void ParseAdditiveExpression()
+    private int ParseAdditiveExpression()
     {
-        ParseMultiplicativeExpression();
+        int value = ParseMultiplicativeExpression();
         while (_current.Type is TokenType.Plus or TokenType.Minus)
         {
             TokenType operation = _current.Type;
             Advance();
-            ParseMultiplicativeExpression();
-            Emit(operation == TokenType.Plus ? Operation.Add : Operation.Subtract);
+            int right = ParseMultiplicativeExpression();
+            value = operation == TokenType.Plus ? checked(value + right) : checked(value - right);
         }
+
+        return value;
     }
 
-    private void ParseMultiplicativeExpression()
+    private int ParseMultiplicativeExpression()
     {
-        ParseUnaryExpression();
+        int value = ParseUnaryExpression();
         while (_current.Type is TokenType.Multiply or TokenType.Divide)
         {
             TokenType operation = _current.Type;
             Advance();
-            ParseUnaryExpression();
-            Emit(operation == TokenType.Multiply ? Operation.Multiply : Operation.Divide);
+            int right = ParseUnaryExpression();
+            value = operation == TokenType.Multiply ? checked(value * right) : checked(value / right);
         }
+
+        return value;
     }
 
-    private void ParseUnaryExpression()
+    private int ParseUnaryExpression()
     {
         _nesting++;
         if (_nesting > MaximumNesting)
@@ -108,44 +120,47 @@ public class Parser
             throw SyntaxError($"Превышена допустимая вложенность выражений ({MaximumNesting}).");
         }
 
+        int value;
         if (_current.Type == TokenType.Minus)
         {
             Advance();
-            ParseUnaryExpression();
-            Emit(Operation.Negate);
+            value = checked(-ParseUnaryExpression());
         }
         else
         {
-            ParsePrimaryExpression();
+            value = ParsePrimaryExpression();
         }
 
         _nesting--;
+        return value;
     }
 
-    private void ParsePrimaryExpression()
+    private int ParsePrimaryExpression()
     {
         if (_current.Type == TokenType.IntLiteral)
         {
-            _instructions.Add(new Instruction(Operation.Push, _current.Value!.ToInt()));
+            int value = _current.Value!.ToInt();
             Advance();
+            return value;
         }
         else if (_current.Type == TokenType.OpenParenthesis)
         {
             Advance();
-            ParseExpression();
+            int value = ParseExpression();
             Expect(TokenType.CloseParenthesis);
+            return value;
         }
         else if (IsIdentifier("readInt"))
         {
-            ParseReadExpression();
+            return ParseReadExpression();
         }
         else if (IsIdentifier("abs"))
         {
-            ParseAbsoluteExpression();
+            return ParseAbsoluteExpression();
         }
         else if (IsIdentifier("min") || IsIdentifier("max"))
         {
-            ParseExtremaExpression();
+            return ParseExtremaExpression();
         }
         else
         {
@@ -153,33 +168,33 @@ public class Parser
         }
     }
 
-    private void ParseReadExpression()
+    private int ParseReadExpression()
     {
         ExpectIdentifier("readInt");
         Expect(TokenType.OpenParenthesis);
         Expect(TokenType.CloseParenthesis);
-        Emit(Operation.Read);
+        return ReadInteger();
     }
 
-    private void ParseAbsoluteExpression()
+    private int ParseAbsoluteExpression()
     {
         ExpectIdentifier("abs");
         Expect(TokenType.OpenParenthesis);
-        ParseExpression();
+        int value = ParseExpression();
         Expect(TokenType.CloseParenthesis);
-        Emit(Operation.Absolute);
+        return Math.Abs(value);
     }
 
-    private void ParseExtremaExpression()
+    private int ParseExtremaExpression()
     {
-        Operation operation = IsIdentifier("min") ? Operation.Minimum : Operation.Maximum;
+        bool minimum = IsIdentifier("min");
         Advance();
         Expect(TokenType.OpenParenthesis);
-        ParseExpression();
+        int left = ParseExpression();
         Expect(TokenType.Comma);
-        ParseExpression();
+        int right = ParseExpression();
         Expect(TokenType.CloseParenthesis);
-        Emit(operation);
+        return minimum ? Math.Min(left, right) : Math.Max(left, right);
     }
 
     private bool IsIdentifier(string name)
@@ -225,8 +240,34 @@ public class Parser
         return new FormatException($"Токен {_tokenNumber} ({_current}): {message}");
     }
 
-    private void Emit(Operation operation)
+    private int ReadInteger()
     {
-        _instructions.Add(new Instruction(operation));
+        string? line = _input.ReadLine();
+        if (line is null)
+        {
+            throw new InvalidOperationException("readInt(): достигнут конец ввода.");
+        }
+
+        string text = line.Trim(' ', '\t');
+        int start = text.Length > 0 && text[0] is '+' or '-' ? 1 : 0;
+        if (start == text.Length)
+        {
+            throw new InvalidOperationException("readInt(): ожидалось целое число.");
+        }
+
+        for (int index = start; index < text.Length; index++)
+        {
+            if (!char.IsAsciiDigit(text[index]))
+            {
+                throw new InvalidOperationException("readInt(): неверный формат целого числа.");
+            }
+        }
+
+        if (!int.TryParse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out int value))
+        {
+            throw new InvalidOperationException("readInt(): число вне диапазона int.");
+        }
+
+        return value;
     }
 }

@@ -6,6 +6,5 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Lexemes/Lexemes.csproj" />
-    <ProjectReference Include="../Runtime/Runtime.csproj" />
   </ItemGroup>
 </Project>

@@ -1,8 +1,7 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 using Lait.Lexemes;
 using Lait.Parsing;
-using Lait.Runtime;
 
 using Xunit;
 
@@ -39,9 +38,9 @@ public class InterpreterTest
     [Fact]
     public void Comments_and_empty_body_are_accepted()
     {
-        Parser parser = new(new Lexer("/* header */ func // comment\nmain(): void { /* body */ } // end"));
+        Parser parser = new(new Lexer("/* header */ func // comment\nmain(): void { /* body */ } // end"), TextReader.Null, TextWriter.Null);
 
-        Assert.Empty(parser.ParseProgram());
+        parser.ParseProgram();
     }
 
     [Theory]
@@ -64,7 +63,7 @@ public class InterpreterTest
     [InlineData("print(1); @")]
     public void Invalid_statements_are_rejected(string body)
     {
-        Parser parser = new(new Lexer($"func main(): void {{ {body} }}"));
+        Parser parser = new(new Lexer($"func main(): void {{ {body} }}"), TextReader.Null, TextWriter.Null);
 
         Assert.Throws<FormatException>(() => parser.ParseProgram());
     }
@@ -79,22 +78,21 @@ public class InterpreterTest
     [InlineData("func main(): void {} 1;")]
     public void Exactly_one_complete_entry_point_is_required(string source)
     {
-        Parser parser = new(new Lexer(source));
+        Parser parser = new(new Lexer(source), TextReader.Null, TextWriter.Null);
 
         Assert.Throws<FormatException>(() => parser.ParseProgram());
     }
 
     [Fact]
-    public void Syntax_errors_prevent_input_and_output()
+    public void Syntax_error_preserves_prior_input_and_output_and_stops_execution()
     {
-        using StringReader input = new("7\n");
+        using StringReader input = new("7\n9\n");
         using StringWriter output = new(CultureInfo.InvariantCulture);
-        Parser parser = new(new Lexer("func main(): void { print(readInt()); print(1) }"));
-        VirtualMachine machine = new();
+        Parser parser = new(new Lexer("func main(): void { print(readInt()); print(1) readInt(); }"), input, output);
 
-        Assert.Throws<FormatException>(() => machine.Execute(parser.ParseProgram(), input, output));
-        Assert.Equal(string.Empty, output.ToString());
-        Assert.Equal("7", input.ReadLine());
+        Assert.Throws<FormatException>(() => parser.ParseProgram());
+        Assert.Equal("7" + Environment.NewLine, output.ToString());
+        Assert.Equal("9", input.ReadLine());
     }
 
     [Theory]
@@ -109,10 +107,10 @@ public class InterpreterTest
     {
         using StringReader input = new(string.Empty);
         using StringWriter output = new(CultureInfo.InvariantCulture);
-        Parser parser = new(new Lexer($"func main(): void {{ print(42); {expression}; print(99); }}"));
-        VirtualMachine machine = new();
+        Parser parser = new(new Lexer($"func main(): void {{ print(42); {expression}; print(99); }}"), input, output);
 
-        Assert.Throws<InvalidOperationException>(() => machine.Execute(parser.ParseProgram(), input, output));
+        Exception? error = Record.Exception(() => parser.ParseProgram());
+        Assert.True(error is OverflowException or DivideByZeroException);
         Assert.Equal("42" + Environment.NewLine, output.ToString());
     }
 
@@ -144,7 +142,7 @@ public class InterpreterTest
     [Fact]
     public void Excessive_nesting_reports_error_instead_of_stack_overflow()
     {
-        Parser parser = new(new Lexer($"func main(): void {{ {new string('-', 300)}1; }}"));
+        Parser parser = new(new Lexer($"func main(): void {{ {new string('-', 300)}1; }}"), TextReader.Null, TextWriter.Null);
 
         Assert.Throws<FormatException>(() => parser.ParseProgram());
     }
@@ -153,9 +151,8 @@ public class InterpreterTest
     {
         using StringReader input = new(inputText);
         using StringWriter output = new(CultureInfo.InvariantCulture);
-        Parser parser = new(new Lexer($"func main(): void {{ {body} }}"));
-        VirtualMachine machine = new();
-        machine.Execute(parser.ParseProgram(), input, output);
+        Parser parser = new(new Lexer($"func main(): void {{ {body} }}"), input, output);
+        parser.ParseProgram();
         return output.ToString();
     }
 }

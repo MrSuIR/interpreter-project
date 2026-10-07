@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 
 using Xunit;
 
@@ -9,12 +9,12 @@ public class ConsoleTest
     [Theory]
     [InlineData("print(10 + 7 * (2 * 3 + 4) + 5 + -5);", "", "80", 0)]
     [InlineData("print(abs(readInt()));", "-7\n", "7", 0)]
-    [InlineData("print(readInt()); print(1)", "7\n", "", 1)]
+    [InlineData("print(readInt()); print(1)", "7\n", "7", 1)]
     [InlineData("print(42); 1 / 0; print(99);", "", "42", 1)]
     [InlineData("print(2147483647 + 1);", "", "", 1)]
     [InlineData("print(readInt());", "wrong\n", "", 1)]
     [InlineData("print(readInt());", "", "", 1)]
-    [InlineData("print(1); @", "", "", 1)]
+    [InlineData("print(1); @", "", "1", 1)]
     public async Task Process_uses_standard_streams_and_exit_codes(
         string body, string input, string expectedOutput, int expectedExitCode)
     {
