@@ -20,6 +20,8 @@ dotnet run --project src/Interpreter --no-build -- examples/arithmetic.lait
 dotnet test Lait.slnx
 ```
 
+Перечень проверок: [перечень тестов](tests/Interpreter.UnitTests/TESTLIST.md).
+
 ## Авторы
 
 - Тимур Асланов
