@@ -1,0 +1,5 @@
+func main(): void {
+    print(abs(readInt()));
+    print(min(8, 3));
+    print(max(2, min(9, 5)));
+}
