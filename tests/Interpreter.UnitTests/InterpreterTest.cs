@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 
 using Lait.Lexemes;
 using Lait.Parsing;
@@ -9,16 +9,160 @@ namespace Lait.Interpreter.UnitTests;
 
 public class InterpreterTest
 {
+    public static TheoryData<string, string> ExpressionsFollowSpecificationData()
+    {
+        return new()
+        {
+            { "10 + 7 * (2 * 3 + 4) + 5 + -5", "80" },
+            { "10 - 3 - 2", "5" },
+            { "24 / 3 / 2", "4" },
+            { "-7 / 2", "-3" },
+            { "--5", "5" },
+            { "(2 + 3) * 4", "20" },
+            { "max(abs(-8), min(9, 5))", "8" },
+            { "-2147483647 - 1", "-2147483648" },
+            { "0", "0" },
+            { "2147483647", "2147483647" },
+            { "1 + 2 * 3", "7" },
+            { "20 / 2 * 3", "30" },
+            { "20 - 6 + 2", "16" },
+            { "7 / -2", "-3" },
+            { "-7 / -2", "3" },
+            { "---5", "-5" },
+            { "2 * -3", "-6" },
+            { "0 - 2147483647", "-2147483647" },
+            { "abs(0)", "0" },
+            { "abs(2147483647)", "2147483647" },
+            { "min(-2147483647 - 1, 2147483647)", "-2147483648" },
+            { "max(-2147483647 - 1, 2147483647)", "2147483647" },
+            { "min(4, 4) + max(-2, -2)", "2" },
+            { "abs(min(-9, max(-5, -3)))", "9" },
+        };
+    }
+
+    public static TheoryData<string> InvalidStatementsAreRejectedData()
+    {
+        return new()
+        {
+            "print(1)",
+            ";",
+            "print();",
+            "print(1, 2);",
+            "readInt(1);",
+            "abs();",
+            "abs(1, 2);",
+            "min(1);",
+            "max(1, 2, 3);",
+            "print(print(1));",
+            "unknown();",
+            "+1;",
+            "1 % 2;",
+            "print(01);",
+            "print(2147483648);",
+            "print(1); /* unfinished",
+            "print(1); @",
+            "max();",
+            "min();",
+            "min(1, 2, 3);",
+            "max(1);",
+            "abs(1,);",
+            "min(,1);",
+            "readInt(1, 2);",
+            "print(1 +);",
+            "print((1);",
+            "print(-);",
+            "print(true);",
+            "print(\"text\");",
+            "print(readString());",
+            "print(Abs(1));",
+            "print(1 == 1);",
+            "int x;",
+            "print(1);;",
+            "-2147483648;",
+            "print(1); \"unfinished",
+        };
+    }
+
+    public static TheoryData<string> ExactlyOneCompleteEntryPointIsRequiredData()
+    {
+        return new()
+        {
+            "",
+            "func other(): void {}",
+            "func main(x): void {}",
+            "func main(): int {}",
+            "func main(): void {",
+            "func main(): void {} func main(): void {}",
+            "func main(): void {} 1;",
+            "func Main(): void {}",
+            "func main() {}",
+            "func main(): void",
+            "func main(): void { print(1);",
+            "func main(): void {} @",
+            "print(1);",
+        };
+    }
+
+    public static TheoryData<string, string> RuntimeErrorStopsLaterInstructionsAndPreservesOutputData()
+    {
+        return new()
+        {
+            { "1 / 0", "Деление на ноль." },
+            { "2147483647 + 1", "Результат операции выходит за диапазон int." },
+            { "(-2147483647 - 1) - 1", "Результат операции выходит за диапазон int." },
+            { "2147483647 * 2", "Результат операции выходит за диапазон int." },
+            { "-(-2147483647 - 1)", "Результат операции выходит за диапазон int." },
+            { "(-2147483647 - 1) / -1", "Результат операции выходит за диапазон int." },
+            { "abs(-2147483647 - 1)", "Результат операции выходит за диапазон int." },
+            { "(-2147483647 - 1) * -1", "Результат операции выходит за диапазон int." },
+        };
+    }
+
+    public static TheoryData<string, string> ReadIntegerAcceptsSpecifiedFormatData()
+    {
+        return new()
+        {
+            { " \t+007\t \n", "7" },
+            { "-2147483648\n", "-2147483648" },
+            { "2147483647\n", "2147483647" },
+            { "0\n", "0" },
+            { "-000\n", "0" },
+            { "00042\n", "42" },
+            { "42", "42" },
+            { "\t -15 \t\r\n", "-15" },
+        };
+    }
+
+    public static TheoryData<string> InvalidInputIsARuntimeErrorData()
+    {
+        return new()
+        {
+            "",
+            "\n",
+            "+\n",
+            "1 2\n",
+            "+ 2\n",
+            "1.5\n",
+            "2147483648\n",
+            "-2147483649\n",
+            "\u00a01\n",
+            "１２\n",
+            "-\n",
+            " \t\n",
+            "1\t2\n",
+            "1e2\n",
+            "0x10\n",
+            "--1\n",
+            "+-1\n",
+            "1\u00a0\n",
+            "\v1\n",
+            "999999999999999999999999\n",
+        };
+    }
+
     [Theory]
-    [InlineData("10 + 7 * (2 * 3 + 4) + 5 + -5", "80")]
-    [InlineData("10 - 3 - 2", "5")]
-    [InlineData("24 / 3 / 2", "4")]
-    [InlineData("-7 / 2", "-3")]
-    [InlineData("--5", "5")]
-    [InlineData("(2 + 3) * 4", "20")]
-    [InlineData("max(abs(-8), min(9, 5))", "8")]
-    [InlineData("-2147483647 - 1", "-2147483648")]
-    public void Expressions_follow_specification(string expression, string expected)
+    [MemberData(nameof(ExpressionsFollowSpecificationData))]
+    public void ExpressionsFollowSpecification(string expression, string expected)
     {
         string output = Run($"print({expression});");
 
@@ -26,7 +170,7 @@ public class InterpreterTest
     }
 
     [Fact]
-    public void Statements_and_operands_execute_in_source_order()
+    public void StatementsAndOperandsExecuteInSourceOrder()
     {
         string output = Run(
             "readInt(); print(readInt() - readInt()); print(min(readInt(), readInt()));",
@@ -36,32 +180,19 @@ public class InterpreterTest
     }
 
     [Fact]
-    public void Comments_and_empty_body_are_accepted()
+    public void CommentsAndEmptyBodyAreAccepted()
     {
-        Parser parser = new(new Lexer("/* header */ func // comment\nmain(): void { /* body */ } // end"), TextReader.Null, TextWriter.Null);
+        using StringWriter output = new(CultureInfo.InvariantCulture);
+        Parser parser = new(new Lexer("/* header */ func // comment\nmain(): void { /* body */ } // end"), TextReader.Null, output);
 
         parser.ParseProgram();
+
+        Assert.Equal(string.Empty, output.ToString());
     }
 
     [Theory]
-    [InlineData("print(1)")]
-    [InlineData(";")]
-    [InlineData("print();")]
-    [InlineData("print(1, 2);")]
-    [InlineData("readInt(1);")]
-    [InlineData("abs();")]
-    [InlineData("abs(1, 2);")]
-    [InlineData("min(1);")]
-    [InlineData("max(1, 2, 3);")]
-    [InlineData("print(print(1));")]
-    [InlineData("unknown();")]
-    [InlineData("+1;")]
-    [InlineData("1 % 2;")]
-    [InlineData("print(01);")]
-    [InlineData("print(2147483648);")]
-    [InlineData("print(1); /* unfinished")]
-    [InlineData("print(1); @")]
-    public void Invalid_statements_are_rejected(string body)
+    [MemberData(nameof(InvalidStatementsAreRejectedData))]
+    public void InvalidStatementsAreRejected(string body)
     {
         Parser parser = new(new Lexer($"func main(): void {{ {body} }}"), TextReader.Null, TextWriter.Null);
 
@@ -69,14 +200,8 @@ public class InterpreterTest
     }
 
     [Theory]
-    [InlineData("")]
-    [InlineData("func other(): void {}")]
-    [InlineData("func main(x): void {}")]
-    [InlineData("func main(): int {}")]
-    [InlineData("func main(): void {")]
-    [InlineData("func main(): void {} func main(): void {}")]
-    [InlineData("func main(): void {} 1;")]
-    public void Exactly_one_complete_entry_point_is_required(string source)
+    [MemberData(nameof(ExactlyOneCompleteEntryPointIsRequiredData))]
+    public void ExactlyOneCompleteEntryPointIsRequired(string source)
     {
         Parser parser = new(new Lexer(source), TextReader.Null, TextWriter.Null);
 
@@ -84,7 +209,7 @@ public class InterpreterTest
     }
 
     [Fact]
-    public void Syntax_error_preserves_prior_input_and_output_and_stops_execution()
+    public void SyntaxErrorPreservesPriorInputAndOutputAndStopsExecution()
     {
         using StringReader input = new("7\n9\n");
         using StringWriter output = new(CultureInfo.InvariantCulture);
@@ -96,55 +221,136 @@ public class InterpreterTest
     }
 
     [Theory]
-    [InlineData("1 / 0")]
-    [InlineData("2147483647 + 1")]
-    [InlineData("(-2147483647 - 1) - 1")]
-    [InlineData("2147483647 * 2")]
-    [InlineData("-(-2147483647 - 1)")]
-    [InlineData("(-2147483647 - 1) / -1")]
-    [InlineData("abs(-2147483647 - 1)")]
-    public void Runtime_error_stops_later_instructions_and_preserves_output(string expression)
+    [MemberData(nameof(RuntimeErrorStopsLaterInstructionsAndPreservesOutputData))]
+    public void RuntimeErrorStopsLaterInstructionsAndPreservesOutput(string expression, string expectedMessage)
     {
         using StringReader input = new(string.Empty);
         using StringWriter output = new(CultureInfo.InvariantCulture);
         Parser parser = new(new Lexer($"func main(): void {{ print(42); {expression}; print(99); }}"), input, output);
 
-        Exception? error = Record.Exception(() => parser.ParseProgram());
-        Assert.True(error is OverflowException or DivideByZeroException);
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => parser.ParseProgram());
+
+        Assert.Equal(expectedMessage, error.Message);
         Assert.Equal("42" + Environment.NewLine, output.ToString());
     }
 
     [Theory]
-    [InlineData(" \t+007\t \n", "7")]
-    [InlineData("-2147483648\n", "-2147483648")]
-    [InlineData("2147483647\n", "2147483647")]
-    public void Read_integer_accepts_specified_format(string input, string expected)
+    [MemberData(nameof(ReadIntegerAcceptsSpecifiedFormatData))]
+    public void ReadIntegerAcceptsSpecifiedFormat(string input, string expected)
     {
-        Assert.Equal(expected + Environment.NewLine, Run("print(readInt());", input));
+        string output = Run("print(readInt());", input);
+
+        Assert.Equal(expected + Environment.NewLine, output);
     }
 
     [Theory]
-    [InlineData("")]
-    [InlineData("\n")]
-    [InlineData("+\n")]
-    [InlineData("1 2\n")]
-    [InlineData("+ 2\n")]
-    [InlineData("1.5\n")]
-    [InlineData("2147483648\n")]
-    [InlineData("-2147483649\n")]
-    [InlineData("\u00a01\n")]
-    [InlineData("１２\n")]
-    public void Invalid_input_is_a_runtime_error(string input)
+    [MemberData(nameof(InvalidInputIsARuntimeErrorData))]
+    public void InvalidInputIsARuntimeError(string input)
     {
         Assert.Throws<InvalidOperationException>(() => Run("print(readInt());", input));
     }
 
     [Fact]
-    public void Excessive_nesting_reports_error_instead_of_stack_overflow()
+    public void ExcessiveNestingReportsErrorInsteadOfStackOverflow()
     {
-        Parser parser = new(new Lexer($"func main(): void {{ {new string('-', 300)}1; }}"), TextReader.Null, TextWriter.Null);
+        string expression = new string('(', 100000) + "1" + new string(')', 100000);
+        Parser parser = new(new Lexer($"func main(): void {{ {expression}; }}"), TextReader.Null, TextWriter.Null);
+        Exception? error = null;
+        Thread thread = new(() => error = Record.Exception(() => parser.ParseProgram()), 256 * 1024);
+
+        thread.Start();
+        thread.Join();
+
+        InvalidOperationException runtimeError = Assert.IsType<InvalidOperationException>(error);
+        Assert.Equal("Недостаточно стека для разбора вложенного выражения.", runtimeError.Message);
+    }
+
+    public static TheoryData<string> DeepExpressionsData()
+    {
+        return new()
+        {
+            new string('-', 300) + "1",
+            new string('(', 300) + "1" + new string(')', 300),
+            string.Concat(Enumerable.Repeat("abs(", 300)) + "1" + new string(')', 300),
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(DeepExpressionsData))]
+    public void DeepExpressionsAreAccepted(string expression)
+    {
+        string output = Run($"print({expression});");
+
+        Assert.Equal("1" + Environment.NewLine, output);
+    }
+
+    [Fact]
+    public void NestedArgumentsAreEvaluatedOnceInSourceOrder()
+    {
+        using StringReader input = new("10\n3\n2\n99\n");
+        using StringWriter output = new(CultureInfo.InvariantCulture);
+        Parser parser = new(new Lexer("func main(): void { print(max(readInt() - readInt(), readInt())); }"), input, output);
+
+        parser.ParseProgram();
+
+        Assert.Equal("7" + Environment.NewLine, output.ToString());
+        Assert.Equal("99", input.ReadLine());
+    }
+
+    public static TheoryData<string> InterruptedPrintData()
+    {
+        return new()
+        {
+            "print(1)",
+            "print(1) readInt();",
+            "print(1, 2);",
+            "print(readInt())",
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(InterruptedPrintData))]
+    public void IncompletePrintDoesNotProduceOutput(string body)
+    {
+        using StringReader input = new("7\n");
+        using StringWriter output = new(CultureInfo.InvariantCulture);
+        Parser parser = new(new Lexer($"func main(): void {{ {body} }}"), input, output);
 
         Assert.Throws<FormatException>(() => parser.ParseProgram());
+
+        Assert.Equal(string.Empty, output.ToString());
+    }
+
+    [Fact]
+    public void RuntimeErrorDoesNotConsumeLaterInput()
+    {
+        using StringReader input = new("9\n");
+        using StringWriter output = new(CultureInfo.InvariantCulture);
+        Parser parser = new(new Lexer("func main(): void { print(42); 1 / 0; readInt(); }"), input, output);
+
+        Assert.Throws<InvalidOperationException>(() => parser.ParseProgram());
+
+        Assert.Equal("42" + Environment.NewLine, output.ToString());
+        Assert.Equal("9", input.ReadLine());
+    }
+
+    [Fact]
+    public void StandaloneExpressionsDoNotProduceOutput()
+    {
+        string output = Run("1 + 2; abs(-3); min(4, 5); readInt();", "7\n");
+
+        Assert.Equal(string.Empty, output);
+    }
+
+    [Fact]
+    public void ParserRejectsRepeatedExecution()
+    {
+        Parser parser = new(new Lexer("func main(): void {}"), TextReader.Null, TextWriter.Null);
+        parser.ParseProgram();
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => parser.ParseProgram());
+
+        Assert.Equal("Парсер допускает только один разбор программы.", error.Message);
     }
 
     private static string Run(string body, string inputText = "")

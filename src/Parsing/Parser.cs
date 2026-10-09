@@ -1,21 +1,20 @@
-﻿using System.Globalization;
+using System.Globalization;
+using System.Runtime.CompilerServices;
 
 using Lait.Lexemes;
 
 namespace Lait.Parsing;
 
 /// <summary>
-/// Рекурсивный спуск по EBNF с непосредственным выполнением выражений.
+/// Разбирает программу рекурсивным спуском и сразу выполняет её инструкции.
 /// </summary>
 public class Parser
 {
-    private const int MaximumNesting = 256;
     private readonly Lexer _lexer;
     private readonly TextReader _input;
     private readonly TextWriter _output;
     private Token _current = new(TokenType.EndOfFile);
     private int _tokenNumber;
-    private int _nesting;
     private bool _started;
 
     public Parser(Lexer lexer, TextReader input, TextWriter output)
@@ -33,50 +32,77 @@ public class Parser
         }
 
         _started = true;
-        Advance();
-        Expect(TokenType.Func);
-        ExpectIdentifier("main");
-        Expect(TokenType.OpenParenthesis);
-        Expect(TokenType.CloseParenthesis);
-        Expect(TokenType.Colon);
-        Expect(TokenType.Void);
+        try
+        {
+            Advance();
+            Expect(TokenType.Func);
+            ExpectIdentifier("main");
+            Expect(TokenType.OpenParenthesis);
+            Expect(TokenType.CloseParenthesis);
+            Expect(TokenType.Colon);
+            Expect(TokenType.Void);
+            ParseBlock();
+            Expect(TokenType.EndOfFile);
+        }
+        catch (OverflowException)
+        {
+            throw new InvalidOperationException("Результат операции выходит за диапазон int.");
+        }
+        catch (DivideByZeroException)
+        {
+            throw new InvalidOperationException("Деление на ноль.");
+        }
+        catch (InsufficientExecutionStackException)
+        {
+            throw new InvalidOperationException("Недостаточно стека для разбора вложенного выражения.");
+        }
+    }
+
+    private void ParseBlock()
+    {
         Expect(TokenType.OpenBrace);
         while (_current.Type != TokenType.CloseBrace)
         {
+            if (_current.Type == TokenType.EndOfFile)
+            {
+                throw SyntaxError("Ожидалась закрывающая фигурная скобка.");
+            }
+
             ParseStatement();
         }
 
         Expect(TokenType.CloseBrace);
-        Expect(TokenType.EndOfFile);
     }
 
     private void ParseStatement()
     {
         if (IsIdentifier("print"))
         {
-            ParsePrintStatement();
+            int value = ParsePrintCall();
+            if (_current.Type != TokenType.Semicolon)
+            {
+                throw SyntaxError("Ожидалась точка с запятой.");
+            }
+
+            // Выводим после проверки инструкции, до чтения следующей лексемы.
+            _output.WriteLine(value.ToString(CultureInfo.InvariantCulture));
+            _output.Flush();
         }
         else
         {
-            ParseExpression();
+            _ = ParseExpression();
         }
 
         Expect(TokenType.Semicolon);
     }
 
-    private void ParsePrintStatement()
+    private int ParsePrintCall()
     {
         ExpectIdentifier("print");
         Expect(TokenType.OpenParenthesis);
         int value = ParseExpression();
         Expect(TokenType.CloseParenthesis);
-        if (_current.Type != TokenType.Semicolon)
-        {
-            throw SyntaxError("Ожидалась точка с запятой.");
-        }
-
-        _output.WriteLine(value.ToString(CultureInfo.InvariantCulture));
-        _output.Flush();
+        return value;
     }
 
     private int ParseExpression()
@@ -114,25 +140,14 @@ public class Parser
 
     private int ParseUnaryExpression()
     {
-        _nesting++;
-        if (_nesting > MaximumNesting)
-        {
-            throw SyntaxError($"Превышена допустимая вложенность выражений ({MaximumNesting}).");
-        }
-
-        int value;
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         if (_current.Type == TokenType.Minus)
         {
             Advance();
-            value = checked(-ParseUnaryExpression());
-        }
-        else
-        {
-            value = ParsePrimaryExpression();
+            return checked(-ParseUnaryExpression());
         }
 
-        _nesting--;
-        return value;
+        return ParsePrimaryExpression();
     }
 
     private int ParsePrimaryExpression()
@@ -143,58 +158,77 @@ public class Parser
             Advance();
             return value;
         }
-        else if (_current.Type == TokenType.OpenParenthesis)
+
+        if (_current.Type == TokenType.OpenParenthesis)
         {
             Advance();
             int value = ParseExpression();
             Expect(TokenType.CloseParenthesis);
             return value;
         }
-        else if (IsIdentifier("readInt"))
+
+        if (_current.Type == TokenType.Identifier)
         {
-            return ParseReadExpression();
+            return ParseNumericCall();
         }
-        else if (IsIdentifier("abs"))
-        {
-            return ParseAbsoluteExpression();
-        }
-        else if (IsIdentifier("min") || IsIdentifier("max"))
-        {
-            return ParseExtremaExpression();
-        }
-        else
-        {
-            throw SyntaxError("Ожидалось число, скобка или вызов readInt, abs, min, max.");
-        }
+
+        throw SyntaxError("Ожидалось число, скобка или вызов числовой функции.");
     }
 
-    private int ParseReadExpression()
+    private int ParseNumericCall()
     {
-        ExpectIdentifier("readInt");
+        string name = ParseNumericFunction();
         Expect(TokenType.OpenParenthesis);
+        List<int> arguments = _current.Type == TokenType.CloseParenthesis ? [] : ParseArguments();
         Expect(TokenType.CloseParenthesis);
-        return ReadInteger();
+        int expectedCount = name switch
+        {
+            "readInt" => 0,
+            "abs" => 1,
+            _ => 2,
+        };
+        if (arguments.Count != expectedCount)
+        {
+            throw SyntaxError($"Функция '{name}' ожидает аргументов: {expectedCount}; получено: {arguments.Count}.");
+        }
+
+        return name switch
+        {
+            "readInt" => ReadInteger(),
+            "abs" => Math.Abs(arguments[0]),
+            "min" => Math.Min(arguments[0], arguments[1]),
+            "max" => Math.Max(arguments[0], arguments[1]),
+            _ => throw new InvalidOperationException("Неизвестная числовая функция."),
+        };
     }
 
-    private int ParseAbsoluteExpression()
+    private string ParseNumericFunction()
     {
-        ExpectIdentifier("abs");
-        Expect(TokenType.OpenParenthesis);
-        int value = ParseExpression();
-        Expect(TokenType.CloseParenthesis);
-        return Math.Abs(value);
-    }
+        if (_current.Type != TokenType.Identifier)
+        {
+            throw SyntaxError("Ожидалось имя числовой функции.");
+        }
 
-    private int ParseExtremaExpression()
-    {
-        bool minimum = IsIdentifier("min");
+        string name = _current.Value!.ToString();
+        if (name is not ("readInt" or "abs" or "min" or "max"))
+        {
+            throw SyntaxError($"Недопустимая числовая функция '{name}'.");
+        }
+
         Advance();
-        Expect(TokenType.OpenParenthesis);
-        int left = ParseExpression();
-        Expect(TokenType.Comma);
-        int right = ParseExpression();
-        Expect(TokenType.CloseParenthesis);
-        return minimum ? Math.Min(left, right) : Math.Max(left, right);
+        return name;
+    }
+
+    private List<int> ParseArguments()
+    {
+        List<int> arguments = [ParseExpression()];
+        while (_current.Type == TokenType.Comma)
+        {
+            Advance();
+            arguments.Add(ParseExpression());
+        }
+
+        return arguments;
     }
 
     private bool IsIdentifier(string name)
