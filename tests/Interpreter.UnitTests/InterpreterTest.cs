@@ -80,6 +80,10 @@ public class InterpreterTest
             "print(1);;",
             "-2147483648;",
             "print(1); \"unfinished",
+            "(print(1));",
+            "1 + print(1);",
+            "abs(print(1));",
+            "main();",
         };
     }
 
@@ -305,6 +309,8 @@ public class InterpreterTest
             "print(1) readInt();",
             "print(1, 2);",
             "print(readInt())",
+            "print(1) + 1;",
+            "abs(print(1));",
         };
     }
 

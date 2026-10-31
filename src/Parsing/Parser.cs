@@ -1,6 +1,6 @@
-using System.Globalization;
 using System.Runtime.CompilerServices;
 
+using Lait.Execution;
 using Lait.Lexemes;
 
 namespace Lait.Parsing;
@@ -11,8 +11,7 @@ namespace Lait.Parsing;
 public class Parser
 {
     private readonly Lexer _lexer;
-    private readonly TextReader _input;
-    private readonly TextWriter _output;
+    private readonly IReadOnlyDictionary<string, BuiltinFunction> _functions;
     private Token _current = new(TokenType.EndOfFile);
     private int _tokenNumber;
     private bool _started;
@@ -20,8 +19,7 @@ public class Parser
     public Parser(Lexer lexer, TextReader input, TextWriter output)
     {
         _lexer = lexer;
-        _input = input;
-        _output = output;
+        _functions = new Builtins(input, output).Functions;
     }
 
     public void ParseProgram()
@@ -76,17 +74,17 @@ public class Parser
 
     private void ParseStatement()
     {
-        if (IsIdentifier("print"))
+        BuiltinFunction? function = _current.Type == TokenType.Identifier ? FindFunction() : null;
+        if (function is { ReturnsValue: false })
         {
-            int value = ParsePrintCall();
+            List<int> arguments = ParseCallArguments(function);
             if (_current.Type != TokenType.Semicolon)
             {
                 throw SyntaxError("Ожидалась точка с запятой.");
             }
 
-            // Выводим после проверки инструкции, до чтения следующей лексемы.
-            _output.WriteLine(value.ToString(CultureInfo.InvariantCulture));
-            _output.Flush();
+            // Функцию без результата вызываем после проверки инструкции, до чтения следующей лексемы.
+            _ = function.Invoke(arguments);
         }
         else
         {
@@ -94,15 +92,6 @@ public class Parser
         }
 
         Expect(TokenType.Semicolon);
-    }
-
-    private int ParsePrintCall()
-    {
-        ExpectIdentifier("print");
-        Expect(TokenType.OpenParenthesis);
-        int value = ParseExpression();
-        Expect(TokenType.CloseParenthesis);
-        return value;
     }
 
     private int ParseExpression()
@@ -169,54 +158,48 @@ public class Parser
 
         if (_current.Type == TokenType.Identifier)
         {
-            return ParseNumericCall();
+            return ParseFunctionCall();
         }
 
-        throw SyntaxError("Ожидалось число, скобка или вызов числовой функции.");
+        throw SyntaxError("Ожидалось число, скобка или вызов функции.");
     }
 
-    private int ParseNumericCall()
+    private int ParseFunctionCall()
     {
-        string name = ParseNumericFunction();
+        BuiltinFunction function = FindFunction();
+        if (!function.ReturnsValue)
+        {
+            throw SyntaxError($"Функция '{function.Name}' не возвращает значения и допускается только как инструкция.");
+        }
+
+        List<int> arguments = ParseCallArguments(function);
+        return function.Invoke(arguments);
+    }
+
+    private List<int> ParseCallArguments(BuiltinFunction function)
+    {
+        Advance();
         Expect(TokenType.OpenParenthesis);
         List<int> arguments = _current.Type == TokenType.CloseParenthesis ? [] : ParseArguments();
         Expect(TokenType.CloseParenthesis);
-        int expectedCount = name switch
+        if (arguments.Count != function.Parameters.Count)
         {
-            "readInt" => 0,
-            "abs" => 1,
-            _ => 2,
-        };
-        if (arguments.Count != expectedCount)
-        {
-            throw SyntaxError($"Функция '{name}' ожидает аргументов: {expectedCount}; получено: {arguments.Count}.");
+            throw SyntaxError(
+                $"Функция '{function.Name}' ожидает аргументов: {function.Parameters.Count}; получено: {arguments.Count}.");
         }
 
-        return name switch
-        {
-            "readInt" => ReadInteger(),
-            "abs" => Math.Abs(arguments[0]),
-            "min" => Math.Min(arguments[0], arguments[1]),
-            "max" => Math.Max(arguments[0], arguments[1]),
-            _ => throw new InvalidOperationException("Неизвестная числовая функция."),
-        };
+        return arguments;
     }
 
-    private string ParseNumericFunction()
+    private BuiltinFunction FindFunction()
     {
-        if (_current.Type != TokenType.Identifier)
-        {
-            throw SyntaxError("Ожидалось имя числовой функции.");
-        }
-
         string name = _current.Value!.ToString();
-        if (name is not ("readInt" or "abs" or "min" or "max"))
+        if (!_functions.TryGetValue(name, out BuiltinFunction? function))
         {
-            throw SyntaxError($"Недопустимая числовая функция '{name}'.");
+            throw SyntaxError($"Неизвестная функция '{name}'.");
         }
 
-        Advance();
-        return name;
+        return function;
     }
 
     private List<int> ParseArguments()
@@ -272,36 +255,5 @@ public class Parser
     private FormatException SyntaxError(string message)
     {
         return new FormatException($"Токен {_tokenNumber} ({_current}): {message}");
-    }
-
-    private int ReadInteger()
-    {
-        string? line = _input.ReadLine();
-        if (line is null)
-        {
-            throw new InvalidOperationException("readInt(): достигнут конец ввода.");
-        }
-
-        string text = line.Trim(' ', '\t');
-        int start = text.Length > 0 && text[0] is '+' or '-' ? 1 : 0;
-        if (start == text.Length)
-        {
-            throw new InvalidOperationException("readInt(): ожидалось целое число.");
-        }
-
-        for (int index = start; index < text.Length; index++)
-        {
-            if (!char.IsAsciiDigit(text[index]))
-            {
-                throw new InvalidOperationException("readInt(): неверный формат целого числа.");
-            }
-        }
-
-        if (!int.TryParse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out int value))
-        {
-            throw new InvalidOperationException("readInt(): число вне диапазона int.");
-        }
-
-        return value;
     }
 }
