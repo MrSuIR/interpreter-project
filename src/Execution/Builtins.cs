@@ -1,5 +1,7 @@
 using System.Globalization;
 
+using Lait.Ast.Declarations;
+
 namespace Lait.Execution;
 
 /// <summary>

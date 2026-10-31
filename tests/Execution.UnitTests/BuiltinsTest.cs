@@ -1,3 +1,4 @@
+using Lait.Ast.Declarations;
 using Lait.Execution;
 using Lait.TestDoubles;
 

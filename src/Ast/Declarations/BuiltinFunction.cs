@@ -1,9 +1,9 @@
-namespace Lait.Execution;
+namespace Lait.Ast.Declarations;
 
 /// <summary>
 /// Определение встроенной функции языка.
 /// </summary>
-public class BuiltinFunction
+public sealed class BuiltinFunction : Declaration
 {
     private readonly Func<IReadOnlyList<int>, int> _implementation;
 
@@ -37,5 +37,13 @@ public class BuiltinFunction
     public int Invoke(IReadOnlyList<int> arguments)
     {
         return _implementation(arguments);
+    }
+
+    /// <summary>
+    /// Встроенная функция не входит в дерево программы, поэтому посетитель к ней не применяется.
+    /// </summary>
+    public override void Accept(IAstVisitor visitor)
+    {
+        throw new InvalidOperationException($"Посетитель не применяется к встроенной функции '{Name}'.");
     }
 }

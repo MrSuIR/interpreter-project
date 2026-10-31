@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 
+using Lait.Ast.Declarations;
 using Lait.Execution;
 using Lait.Lexemes;
 
