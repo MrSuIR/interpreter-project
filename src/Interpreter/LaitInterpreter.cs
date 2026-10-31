@@ -1,3 +1,4 @@
+using Lait.Ast;
 using Lait.Ast.Declarations;
 using Lait.Execution;
 using Lait.Lexemes;
@@ -29,9 +30,9 @@ public class LaitInterpreter
         Parser parser = new(new Lexer(code));
         FunctionDeclaration program = parser.ParseProgram();
 
-        // 2. Проверка вызовов функций.
+        // 2. Проверка программы; парсер пока разбирает только функцию main.
         SemanticsChecker checker = new(_builtins.Functions);
-        checker.Check(program);
+        checker.Check(new ProgramNode([program]));
 
         // 3. Исполнение программы.
         AstEvaluator evaluator = new(_builtins.Functions);
