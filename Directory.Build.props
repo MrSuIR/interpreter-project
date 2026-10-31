@@ -1,7 +1,8 @@
 <Project>
     <PropertyGroup>
         <NuGetAudit>false</NuGetAudit>
-        <WarningsAsErrors>true</WarningsAsErrors>
+        <LangVersion>14</LangVersion>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         <_SkipUpgradeNetAnalyzersNuGetWarning>true</_SkipUpgradeNetAnalyzersNuGetWarning>
     </PropertyGroup>
 
