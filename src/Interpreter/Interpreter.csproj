@@ -6,8 +6,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../Ast/Ast.csproj" />
     <ProjectReference Include="../Execution/Execution.csproj" />
     <ProjectReference Include="../Lexemes/Lexemes.csproj" />
     <ProjectReference Include="../Parsing/Parsing.csproj" />
+    <ProjectReference Include="../Semantics/Semantics.csproj" />
   </ItemGroup>
 </Project>

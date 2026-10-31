@@ -47,9 +47,12 @@ public class AcceptanceTest
             { "func other(): void {}", "", "" },
             { "func main(): void {} func main(): void {}", "", "" },
             { "func main(): void { print(1) }", "", "" },
-            { "func main(): void { print(42); print(readInt()) readInt(); }", "7\n9\n", "42\n" },
-            { "func main(): void { print(42); min(1); print(99); }", "", "42\n" },
-            { "func main(): void { print(42); @ print(99); }", "", "42\n" },
+
+            // Ошибка разбора или проверки обнаруживается до выполнения первой инструкции.
+            { "func main(): void { print(42); print(readInt()) readInt(); }", "7\n9\n", "" },
+            { "func main(): void { print(42); min(1); print(99); }", "", "" },
+            { "func main(): void { print(42); 1 + print(1); }", "", "" },
+            { "func main(): void { print(42); @ print(99); }", "", "" },
         };
     }
 

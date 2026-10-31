@@ -6,7 +6,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Ast/Ast.csproj" />
-    <ProjectReference Include="../Execution/Execution.csproj" />
     <ProjectReference Include="../Lexemes/Lexemes.csproj" />
   </ItemGroup>
 </Project>

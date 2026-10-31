@@ -1,29 +1,33 @@
 using System.Runtime.CompilerServices;
 
 using Lait.Ast.Declarations;
-using Lait.Execution;
+using Lait.Ast.Expressions;
+using Lait.Ast.Statements;
 using Lait.Lexemes;
 
 namespace Lait.Parsing;
 
 /// <summary>
-/// Разбирает программу рекурсивным спуском и сразу выполняет её инструкции.
+/// Разбирает программу рекурсивным спуском и строит её AST.
 /// </summary>
 public class Parser
 {
     private readonly Lexer _lexer;
-    private readonly IReadOnlyDictionary<string, BuiltinFunction> _functions;
     private Token _current = new(TokenType.EndOfFile);
     private int _tokenNumber;
     private bool _started;
 
-    public Parser(Lexer lexer, Builtins builtins)
+    public Parser(Lexer lexer)
     {
         _lexer = lexer;
-        _functions = builtins.Functions;
     }
 
-    public void ParseProgram()
+    /// <summary>
+    /// Разбирает программу.
+    /// Правило:
+    ///     program = "func", "main", "(", ")", ":", "void", block ;
+    /// </summary>
+    public FunctionDeclaration ParseProgram()
     {
         if (_started)
         {
@@ -40,16 +44,9 @@ public class Parser
             Expect(TokenType.CloseParenthesis);
             Expect(TokenType.Colon);
             Expect(TokenType.Void);
-            ParseBlock();
+            List<Statement> body = ParseBlock();
             Expect(TokenType.EndOfFile);
-        }
-        catch (OverflowException)
-        {
-            throw new InvalidOperationException("Результат операции выходит за диапазон int.");
-        }
-        catch (DivideByZeroException)
-        {
-            throw new InvalidOperationException("Деление на ноль.");
+            return new FunctionDeclaration("main", body);
         }
         catch (InsufficientExecutionStackException)
         {
@@ -57,8 +54,14 @@ public class Parser
         }
     }
 
-    private void ParseBlock()
+    /// <summary>
+    /// Разбирает блок инструкций.
+    /// Правило:
+    ///     block = "{", { statement }, "}" ;
+    /// </summary>
+    private List<Statement> ParseBlock()
     {
+        List<Statement> statements = [];
         Expect(TokenType.OpenBrace);
         while (_current.Type != TokenType.CloseBrace)
         {
@@ -67,94 +70,110 @@ public class Parser
                 throw SyntaxError("Ожидалась закрывающая фигурная скобка.");
             }
 
-            ParseStatement();
+            statements.Add(ParseStatement());
         }
 
         Expect(TokenType.CloseBrace);
+        return statements;
     }
 
-    private void ParseStatement()
+    /// <summary>
+    /// Разбирает инструкцию.
+    /// Правило:
+    ///     statement = expression, ";" ;
+    /// </summary>
+    private ExpressionStatement ParseStatement()
     {
-        BuiltinFunction? function = _current.Type == TokenType.Identifier ? FindFunction() : null;
-        if (function is { ReturnsValue: false })
-        {
-            List<int> arguments = ParseCallArguments(function);
-            if (_current.Type != TokenType.Semicolon)
-            {
-                throw SyntaxError("Ожидалась точка с запятой.");
-            }
-
-            // Функцию без результата вызываем после проверки инструкции, до чтения следующей лексемы.
-            _ = function.Invoke(arguments);
-        }
-        else
-        {
-            _ = ParseExpression();
-        }
-
+        Expression expression = ParseExpression();
         Expect(TokenType.Semicolon);
+        return new ExpressionStatement(expression);
     }
 
-    private int ParseExpression()
+    /// <summary>
+    /// Разбирает выражение.
+    /// Правило:
+    ///     expression = additive_expression ;
+    /// </summary>
+    private Expression ParseExpression()
     {
         return ParseAdditiveExpression();
     }
 
-    private int ParseAdditiveExpression()
+    /// <summary>
+    /// Разбирает операторы сложения и вычитания.
+    /// Правило:
+    ///     additive_expression = multiplicative_expression, { ( "+" | "-" ), multiplicative_expression } ;
+    /// </summary>
+    private Expression ParseAdditiveExpression()
     {
-        int value = ParseMultiplicativeExpression();
+        Expression expression = ParseMultiplicativeExpression();
         while (_current.Type is TokenType.Plus or TokenType.Minus)
         {
-            TokenType operation = _current.Type;
+            BinaryOperation operation = _current.Type == TokenType.Plus ? BinaryOperation.Add : BinaryOperation.Subtract;
             Advance();
-            int right = ParseMultiplicativeExpression();
-            value = operation == TokenType.Plus ? checked(value + right) : checked(value - right);
+            expression = new BinaryOperationExpression(expression, operation, ParseMultiplicativeExpression());
         }
 
-        return value;
+        return expression;
     }
 
-    private int ParseMultiplicativeExpression()
+    /// <summary>
+    /// Разбирает операторы умножения и деления.
+    /// Правило:
+    ///     multiplicative_expression = unary_expression, { ( "*" | "/" ), unary_expression } ;
+    /// </summary>
+    private Expression ParseMultiplicativeExpression()
     {
-        int value = ParseUnaryExpression();
+        Expression expression = ParseUnaryExpression();
         while (_current.Type is TokenType.Multiply or TokenType.Divide)
         {
-            TokenType operation = _current.Type;
+            BinaryOperation operation = _current.Type == TokenType.Multiply
+                ? BinaryOperation.Multiply
+                : BinaryOperation.Divide;
             Advance();
-            int right = ParseUnaryExpression();
-            value = operation == TokenType.Multiply ? checked(value * right) : checked(value / right);
+            expression = new BinaryOperationExpression(expression, operation, ParseUnaryExpression());
         }
 
-        return value;
+        return expression;
     }
 
-    private int ParseUnaryExpression()
+    /// <summary>
+    /// Разбирает унарный минус.
+    /// Правило:
+    ///     unary_expression = "-", unary_expression | primary_expression ;
+    /// </summary>
+    private Expression ParseUnaryExpression()
     {
         RuntimeHelpers.EnsureSufficientExecutionStack();
         if (_current.Type == TokenType.Minus)
         {
             Advance();
-            return checked(-ParseUnaryExpression());
+            return new UnaryMinusExpression(ParseUnaryExpression());
         }
 
         return ParsePrimaryExpression();
     }
 
-    private int ParsePrimaryExpression()
+    /// <summary>
+    /// Разбирает число, выражение в скобках или вызов функции.
+    /// Правило:
+    ///     primary_expression = ? IntLiteral ? | "(", expression, ")" | function_call ;
+    /// </summary>
+    private Expression ParsePrimaryExpression()
     {
         if (_current.Type == TokenType.IntLiteral)
         {
-            int value = _current.Value!.ToInt();
+            LiteralExpression literal = new(_current.Value!.ToInt());
             Advance();
-            return value;
+            return literal;
         }
 
         if (_current.Type == TokenType.OpenParenthesis)
         {
             Advance();
-            int value = ParseExpression();
+            Expression expression = ParseExpression();
             Expect(TokenType.CloseParenthesis);
-            return value;
+            return expression;
         }
 
         if (_current.Type == TokenType.Identifier)
@@ -165,47 +184,29 @@ public class Parser
         throw SyntaxError("Ожидалось число, скобка или вызов функции.");
     }
 
-    private int ParseFunctionCall()
-    {
-        BuiltinFunction function = FindFunction();
-        if (!function.ReturnsValue)
-        {
-            throw SyntaxError($"Функция '{function.Name}' не возвращает значения и допускается только как инструкция.");
-        }
-
-        List<int> arguments = ParseCallArguments(function);
-        return function.Invoke(arguments);
-    }
-
-    private List<int> ParseCallArguments(BuiltinFunction function)
-    {
-        Advance();
-        Expect(TokenType.OpenParenthesis);
-        List<int> arguments = _current.Type == TokenType.CloseParenthesis ? [] : ParseArguments();
-        Expect(TokenType.CloseParenthesis);
-        if (arguments.Count != function.Parameters.Count)
-        {
-            throw SyntaxError(
-                $"Функция '{function.Name}' ожидает аргументов: {function.Parameters.Count}; получено: {arguments.Count}.");
-        }
-
-        return arguments;
-    }
-
-    private BuiltinFunction FindFunction()
+    /// <summary>
+    /// Разбирает вызов функции.
+    /// Правило:
+    ///     function_call = ? Identifier ?, "(", [ arguments ], ")" ;
+    /// </summary>
+    private FunctionCallExpression ParseFunctionCall()
     {
         string name = _current.Value!.ToString();
-        if (!_functions.TryGetValue(name, out BuiltinFunction? function))
-        {
-            throw SyntaxError($"Неизвестная функция '{name}'.");
-        }
-
-        return function;
+        Advance();
+        Expect(TokenType.OpenParenthesis);
+        List<Expression> arguments = _current.Type == TokenType.CloseParenthesis ? [] : ParseArguments();
+        Expect(TokenType.CloseParenthesis);
+        return new FunctionCallExpression(name, arguments);
     }
 
-    private List<int> ParseArguments()
+    /// <summary>
+    /// Разбирает аргументы вызова функции.
+    /// Правило:
+    ///     arguments = expression, { ",", expression } ;
+    /// </summary>
+    private List<Expression> ParseArguments()
     {
-        List<int> arguments = [ParseExpression()];
+        List<Expression> arguments = [ParseExpression()];
         while (_current.Type == TokenType.Comma)
         {
             Advance();

@@ -1,4 +1,3 @@
-using Lait.Execution;
 using Lait.Lexemes;
 using Lait.Parsing;
 using Lait.TestDoubles;
@@ -80,7 +79,6 @@ public class InterpreterTest
             "print(1);;",
             "-2147483648;",
             "print(1); \"unfinished",
-            "(print(1));",
             "1 + print(1);",
             "abs(print(1));",
             "main();",
@@ -212,16 +210,36 @@ public class InterpreterTest
         Assert.Throws<FormatException>(() => interpreter.Execute(source));
     }
 
-    [Fact]
-    public void SyntaxErrorPreservesPriorInputAndOutputAndStopsExecution()
+    public static TheoryData<string> ErrorBeforeExecutionPreventsAllInstructionsData()
+    {
+        return new()
+        {
+            "print(readInt()); print(1) readInt();",
+            "print(readInt()); abs();",
+            "print(readInt()); 1 + print(1);",
+            "print(readInt()); @",
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(ErrorBeforeExecutionPreventsAllInstructionsData))]
+    public void ErrorBeforeExecutionPreventsAllInstructions(string body)
     {
         FakeEnvironment environment = new("7\n9\n");
         LaitInterpreter interpreter = new(environment);
 
-        Assert.Throws<FormatException>(
-            () => interpreter.Execute("func main(): void { print(readInt()); print(1) readInt(); }"));
-        Assert.Equal("7\n", environment.Output);
-        Assert.Equal("9", environment.ReadLine());
+        Assert.Throws<FormatException>(() => interpreter.Execute($"func main(): void {{ {body} }}"));
+
+        Assert.Equal(string.Empty, environment.Output);
+        Assert.Equal("7", environment.ReadLine());
+    }
+
+    [Fact]
+    public void ParenthesizedCallWithoutResultIsStatement()
+    {
+        string output = Run("(print(1)); ((print(2)));");
+
+        Assert.Equal("1\n2\n", output);
     }
 
     [Theory]
@@ -351,7 +369,7 @@ public class InterpreterTest
     [Fact]
     public void ParserRejectsRepeatedExecution()
     {
-        Parser parser = new(new Lexer("func main(): void {}"), new Builtins(new FakeEnvironment()));
+        Parser parser = new(new Lexer("func main(): void {}"));
         parser.ParseProgram();
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => parser.ParseProgram());
