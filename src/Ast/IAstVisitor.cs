@@ -17,7 +17,23 @@ public interface IAstVisitor
 
     void Visit(FunctionCallExpression expression);
 
+    void Visit(VariableAccessExpression expression);
+
+    void Visit(AssignmentExpression expression);
+
     void Visit(ExpressionStatement statement);
 
+    void Visit(BlockStatement statement);
+
+    void Visit(VariableDeclarationStatement statement);
+
+    void Visit(ReturnStatement statement);
+
     void Visit(FunctionDeclaration declaration);
+
+    void Visit(ParameterDeclaration declaration);
+
+    void Visit(VariableDeclaration declaration);
+
+    void Visit(ProgramNode program);
 }

@@ -46,7 +46,7 @@ public class Parser
             Expect(TokenType.Void);
             List<Statement> body = ParseBlock();
             Expect(TokenType.EndOfFile);
-            return new FunctionDeclaration("main", body);
+            return new FunctionDeclaration("main", [], returnsValue: false, new BlockStatement(body));
         }
         catch (InsufficientExecutionStackException)
         {

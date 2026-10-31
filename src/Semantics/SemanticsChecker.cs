@@ -73,12 +73,52 @@ public class SemanticsChecker : IAstVisitor
         }
     }
 
+    public void Visit(VariableAccessExpression expression)
+    {
+        throw new NotSupportedException("Проверка переменных не поддерживается.");
+    }
+
+    public void Visit(AssignmentExpression expression)
+    {
+        throw new NotSupportedException("Проверка присваивания не поддерживается.");
+    }
+
+    public void Visit(BlockStatement statement)
+    {
+        foreach (Statement nested in statement.Statements)
+        {
+            nested.Accept(this);
+        }
+    }
+
+    public void Visit(VariableDeclarationStatement statement)
+    {
+        throw new NotSupportedException("Проверка переменных не поддерживается.");
+    }
+
+    public void Visit(ReturnStatement statement)
+    {
+        throw new NotSupportedException("Проверка return не поддерживается.");
+    }
+
     public void Visit(FunctionDeclaration declaration)
     {
-        foreach (Statement statement in declaration.Body)
-        {
-            statement.Accept(this);
-        }
+        declaration.Body.Accept(this);
+    }
+
+    public void Visit(ParameterDeclaration declaration)
+    {
+        throw new NotSupportedException("Проверка параметров не поддерживается.");
+    }
+
+    public void Visit(VariableDeclaration declaration)
+    {
+        throw new NotSupportedException("Проверка переменных не поддерживается.");
+    }
+
+    public void Visit(ProgramNode program)
+    {
+        throw new NotSupportedException("Проверка пользовательских функций не поддерживается.");
     }
 
     private void CheckCall(FunctionCallExpression call, bool requiresResult)

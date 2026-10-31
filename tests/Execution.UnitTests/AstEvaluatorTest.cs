@@ -170,6 +170,10 @@ public class AstEvaluatorTest
 
     private static FunctionDeclaration MainFunction(params Expression[] statements)
     {
-        return new FunctionDeclaration("main", [.. statements.Select(expression => new ExpressionStatement(expression))]);
+        return new FunctionDeclaration(
+            "main",
+            [],
+            returnsValue: false,
+            new BlockStatement([.. statements.Select(expression => new ExpressionStatement(expression))]));
     }
 }

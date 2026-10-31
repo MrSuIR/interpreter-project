@@ -118,12 +118,52 @@ public class AstEvaluator : IAstVisitor
         _values.Clear();
     }
 
+    public void Visit(VariableAccessExpression expression)
+    {
+        throw new NotSupportedException("Переменные не поддерживаются.");
+    }
+
+    public void Visit(AssignmentExpression expression)
+    {
+        throw new NotSupportedException("Присваивание не поддерживается.");
+    }
+
+    public void Visit(BlockStatement statement)
+    {
+        foreach (Statement nested in statement.Statements)
+        {
+            nested.Accept(this);
+        }
+    }
+
+    public void Visit(VariableDeclarationStatement statement)
+    {
+        throw new NotSupportedException("Переменные не поддерживаются.");
+    }
+
+    public void Visit(ReturnStatement statement)
+    {
+        throw new NotSupportedException("Инструкция return не поддерживается.");
+    }
+
     public void Visit(FunctionDeclaration declaration)
     {
-        foreach (Statement statement in declaration.Body)
-        {
-            statement.Accept(this);
-        }
+        declaration.Body.Accept(this);
+    }
+
+    public void Visit(ParameterDeclaration declaration)
+    {
+        throw new NotSupportedException("Параметры функций не поддерживаются.");
+    }
+
+    public void Visit(VariableDeclaration declaration)
+    {
+        throw new NotSupportedException("Переменные не поддерживаются.");
+    }
+
+    public void Visit(ProgramNode program)
+    {
+        throw new NotSupportedException("Пользовательские функции не поддерживаются.");
     }
 
     /// <summary>
