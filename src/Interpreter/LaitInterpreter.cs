@@ -1,5 +1,4 @@
 using Lait.Ast;
-using Lait.Ast.Declarations;
 using Lait.Execution;
 using Lait.Lexemes;
 using Lait.Parsing;
@@ -28,15 +27,14 @@ public class LaitInterpreter
     {
         // 1. Разбор программы.
         Parser parser = new(new Lexer(code));
-        FunctionDeclaration program = parser.ParseProgram();
+        ProgramNode program = parser.ParseProgram();
 
-        // 2. Проверка программы; парсер пока разбирает только функцию main.
-        ProgramNode wholeProgram = new([program]);
+        // 2. Проверка программы и установка атрибутов AST.
         SemanticsChecker checker = new(_builtins.Functions);
-        checker.Check(wholeProgram);
+        checker.Check(program);
 
         // 3. Исполнение программы.
         AstEvaluator evaluator = new();
-        evaluator.Execute(wholeProgram);
+        evaluator.Execute(program);
     }
 }
