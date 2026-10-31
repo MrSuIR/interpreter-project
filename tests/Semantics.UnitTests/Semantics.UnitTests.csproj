@@ -20,4 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Semantics/Semantics.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../TestDoubles/AstFactory.cs" Link="TestDoubles/AstFactory.cs" />
+  </ItemGroup>
 </Project>

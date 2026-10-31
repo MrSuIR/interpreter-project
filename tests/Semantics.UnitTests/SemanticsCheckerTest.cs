@@ -3,8 +3,11 @@ using Lait.Ast.Declarations;
 using Lait.Ast.Expressions;
 using Lait.Ast.Statements;
 using Lait.Semantics;
+using Lait.TestDoubles;
 
 using Xunit;
+
+using static Lait.TestDoubles.AstFactory;
 
 namespace Lait.Semantics.UnitTests;
 
@@ -284,79 +287,5 @@ public class SemanticsCheckerTest
 
         InvalidOperationException stackError = Assert.IsType<InvalidOperationException>(error);
         Assert.Equal("Недостаточно стека для проверки вложенного выражения.", stackError.Message);
-    }
-
-    private static LiteralExpression Number(int value)
-    {
-        return new LiteralExpression(value);
-    }
-
-    private static VariableAccessExpression Name(string name)
-    {
-        return new VariableAccessExpression(name);
-    }
-
-    private static UnaryMinusExpression Minus(Expression operand)
-    {
-        return new UnaryMinusExpression(operand);
-    }
-
-    private static BinaryOperationExpression Binary(Expression left, BinaryOperation operation, Expression right)
-    {
-        return new BinaryOperationExpression(left, operation, right);
-    }
-
-    private static AssignmentExpression Assign(Expression left, Expression right)
-    {
-        return new AssignmentExpression(left, right);
-    }
-
-    private static FunctionCallExpression Call(string name, params Expression[] arguments)
-    {
-        return new FunctionCallExpression(name, arguments);
-    }
-
-    private static ExpressionStatement Expr(Expression expression)
-    {
-        return new ExpressionStatement(expression);
-    }
-
-    private static VariableDeclarationStatement Var(string name, Expression initialValue)
-    {
-        return new VariableDeclarationStatement(new VariableDeclaration(name, initialValue));
-    }
-
-    private static ReturnStatement Return(Expression? value = null)
-    {
-        return new ReturnStatement(value);
-    }
-
-    private static BlockStatement Block(params Statement[] statements)
-    {
-        return new BlockStatement(statements);
-    }
-
-    private static FunctionDeclaration Function(string name, string[] parameters, bool returnsValue, params Statement[] body)
-    {
-        return new FunctionDeclaration(
-            name,
-            [.. parameters.Select(parameter => new ParameterDeclaration(parameter))],
-            returnsValue,
-            new BlockStatement(body));
-    }
-
-    private static FunctionDeclaration MainFunction(params Statement[] body)
-    {
-        return Function("main", [], false, body);
-    }
-
-    private static ProgramNode MainProgram(params Statement[] body)
-    {
-        return ProgramOf(MainFunction(body));
-    }
-
-    private static ProgramNode ProgramOf(params FunctionDeclaration[] functions)
-    {
-        return new ProgramNode(functions);
     }
 }

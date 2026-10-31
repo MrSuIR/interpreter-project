@@ -8,49 +8,57 @@ using Lait.Ast.Statements;
 namespace Lait.Execution;
 
 /// <summary>
-/// Выполняет ранее разобранную программу, используя её AST.
+/// Выполняет ранее разобранную и проверенную программу, используя её AST.
 /// </summary>
+/// <remarks>
+/// Использует атрибуты, установленные при проверке программы: объявления вызываемых функций и переменных.
+/// </remarks>
 /// <exception cref="InvalidOperationException">Бросается при ошибке в процессе вычислений.</exception>
 public class AstEvaluator : IAstVisitor
 {
-    /// <summary>
-    /// Словарь встроенных функций языка.
-    /// </summary>
-    private readonly IReadOnlyDictionary<string, BuiltinFunction> _builtins;
-
     /// <summary>
     /// В стек временно складываются результаты вычисления операндов текущей операции.
     /// </summary>
     private readonly Stack<int> _values = [];
 
-    public AstEvaluator(IReadOnlyDictionary<string, BuiltinFunction> builtins)
-    {
-        _builtins = builtins;
-    }
+    /// <summary>
+    /// Значения параметров и переменных выполняемого вызова функции.
+    /// Объявления уникальны, поэтому перекрытые имена не смешиваются.
+    /// </summary>
+    private Dictionary<AbstractVariableDeclaration, int> _frame = [];
 
     /// <summary>
-    /// Выполняет инструкции тела функции по порядку.
+    /// Истина после выполнения return, пока не завершится текущий вызов функции.
     /// </summary>
-    public void Execute(FunctionDeclaration function)
-    {
-        _values.Clear();
-        RunWithRuntimeErrors(() => function.Accept(this));
-    }
+    private bool _returning;
 
     /// <summary>
-    /// Вычисляет выражение и возвращает его значение.
+    /// Значение, переданное в return.
     /// </summary>
-    public int Evaluate(Expression expression)
+    private int _returnValue;
+
+    /// <summary>
+    /// Выполняет программу, вызывая функцию main.
+    /// </summary>
+    public void Execute(ProgramNode program)
     {
         _values.Clear();
-        RunWithRuntimeErrors(() => expression.Accept(this));
-
-        return _values.Count switch
+        try
         {
-            1 => _values.Pop(),
-            0 => throw new InvalidOperationException("Выражение не имеет значения."),
-            _ => throw new InvalidOperationException($"После вычисления в стеке осталось значений: {_values.Count}."),
-        };
+            program.Accept(this);
+        }
+        catch (OverflowException)
+        {
+            throw new InvalidOperationException("Результат операции выходит за диапазон int.");
+        }
+        catch (DivideByZeroException)
+        {
+            throw new InvalidOperationException("Деление на ноль.");
+        }
+        catch (InsufficientExecutionStackException)
+        {
+            throw new InvalidOperationException("Недостаточно стека для выполнения программы.");
+        }
     }
 
     public void Visit(LiteralExpression expression)
@@ -89,10 +97,6 @@ public class AstEvaluator : IAstVisitor
     public void Visit(FunctionCallExpression expression)
     {
         RuntimeHelpers.EnsureSufficientExecutionStack();
-        if (!_builtins.TryGetValue(expression.Name, out BuiltinFunction? function))
-        {
-            throw new InvalidOperationException($"Неизвестная функция '{expression.Name}'.");
-        }
 
         // Вычисляем аргументы функции слева направо.
         List<int> arguments = [];
@@ -102,90 +106,127 @@ public class AstEvaluator : IAstVisitor
             arguments.Add(_values.Pop());
         }
 
+        int result = expression.Function switch
+        {
+            BuiltinFunction builtin => builtin.Invoke(arguments),
+            FunctionDeclaration function => InvokeFunction(function, arguments),
+            _ => throw new InvalidOperationException($"Неизвестный вид функции '{expression.Name}'."),
+        };
+
         // Функция без результата не оставляет значения в стеке.
-        int result = function.Invoke(arguments);
-        if (function.ReturnsValue)
+        if (expression.Function.ReturnsValue)
         {
             _values.Push(result);
         }
     }
 
-    public void Visit(ExpressionStatement statement)
-    {
-        statement.Expression.Accept(this);
-
-        // Результат выражения отбрасывается.
-        _values.Clear();
-    }
-
     public void Visit(VariableAccessExpression expression)
     {
-        throw new NotSupportedException("Переменные не поддерживаются.");
+        _values.Push(_frame[expression.Variable]);
     }
 
     public void Visit(AssignmentExpression expression)
     {
-        throw new NotSupportedException("Присваивание не поддерживается.");
+        RuntimeHelpers.EnsureSufficientExecutionStack();
+        if (expression.Left is not VariableAccessExpression variable)
+        {
+            throw new InvalidOperationException("Слева от присваивания должна стоять переменная.");
+        }
+
+        // Значение правой части остаётся в стеке как значение присваивания.
+        expression.Right.Accept(this);
+        _frame[variable.Variable] = _values.Peek();
+    }
+
+    public void Visit(ExpressionStatement statement)
+    {
+        int depth = _values.Count;
+        statement.Expression.Accept(this);
+
+        // Результат выражения отбрасывается.
+        while (_values.Count > depth)
+        {
+            _values.Pop();
+        }
     }
 
     public void Visit(BlockStatement statement)
     {
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         foreach (Statement nested in statement.Statements)
         {
             nested.Accept(this);
+            if (_returning)
+            {
+                return;
+            }
         }
     }
 
     public void Visit(VariableDeclarationStatement statement)
     {
-        throw new NotSupportedException("Переменные не поддерживаются.");
+        statement.Declaration.Accept(this);
     }
 
     public void Visit(ReturnStatement statement)
     {
-        throw new NotSupportedException("Инструкция return не поддерживается.");
+        if (statement.Value is not null)
+        {
+            statement.Value.Accept(this);
+            _returnValue = _values.Pop();
+        }
+
+        _returning = true;
     }
 
     public void Visit(FunctionDeclaration declaration)
     {
-        declaration.Body.Accept(this);
+        // Объявление функции ничего не выполняет: тело выполняется при вызове.
     }
 
     public void Visit(ParameterDeclaration declaration)
     {
-        throw new NotSupportedException("Параметры функций не поддерживаются.");
+        // Параметры получают значения при вызове функции.
     }
 
     public void Visit(VariableDeclaration declaration)
     {
-        throw new NotSupportedException("Переменные не поддерживаются.");
+        declaration.InitialValue.Accept(this);
+        _frame[declaration] = _values.Pop();
     }
 
     public void Visit(ProgramNode program)
     {
-        throw new NotSupportedException("Пользовательские функции не поддерживаются.");
+        FunctionDeclaration main = program.Functions.First(function => function.Name == "main");
+        InvokeFunction(main, []);
     }
 
     /// <summary>
-    /// Выполняет действие, превращая арифметические ошибки и нехватку стека в ошибки выполнения.
+    /// Выполняет функцию программы в новом кадре вызова и возвращает её результат.
     /// </summary>
-    private static void RunWithRuntimeErrors(Action action)
+    private int InvokeFunction(FunctionDeclaration function, IReadOnlyList<int> arguments)
     {
+        // Параметры передаются по значению.
+        Dictionary<AbstractVariableDeclaration, int> frame = [];
+        for (int index = 0; index < function.Parameters.Count; index++)
+        {
+            frame[function.Parameters[index]] = arguments[index];
+        }
+
+        Dictionary<AbstractVariableDeclaration, int> callerFrame = _frame;
+        _frame = frame;
         try
         {
-            action();
+            function.Body.Accept(this);
         }
-        catch (OverflowException)
+        finally
         {
-            throw new InvalidOperationException("Результат операции выходит за диапазон int.");
+            _frame = callerFrame;
         }
-        catch (DivideByZeroException)
-        {
-            throw new InvalidOperationException("Деление на ноль.");
-        }
-        catch (InsufficientExecutionStackException)
-        {
-            throw new InvalidOperationException("Недостаточно стека для вычисления вложенного выражения.");
-        }
+
+        int result = _returnValue;
+        _returning = false;
+        _returnValue = 0;
+        return result;
     }
 }

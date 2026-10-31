@@ -31,11 +31,12 @@ public class LaitInterpreter
         FunctionDeclaration program = parser.ParseProgram();
 
         // 2. Проверка программы; парсер пока разбирает только функцию main.
+        ProgramNode wholeProgram = new([program]);
         SemanticsChecker checker = new(_builtins.Functions);
-        checker.Check(new ProgramNode([program]));
+        checker.Check(wholeProgram);
 
         // 3. Исполнение программы.
-        AstEvaluator evaluator = new(_builtins.Functions);
-        evaluator.Execute(program);
+        AstEvaluator evaluator = new();
+        evaluator.Execute(wholeProgram);
     }
 }

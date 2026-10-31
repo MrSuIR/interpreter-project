@@ -19,8 +19,10 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Execution/Execution.csproj" />
+    <ProjectReference Include="../../src/Semantics/Semantics.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="../TestDoubles/AstFactory.cs" Link="TestDoubles/AstFactory.cs" />
     <Compile Include="../TestDoubles/FakeEnvironment.cs" Link="TestDoubles/FakeEnvironment.cs" />
   </ItemGroup>
 </Project>
