@@ -16,10 +16,10 @@ public class Parser
     private int _tokenNumber;
     private bool _started;
 
-    public Parser(Lexer lexer, TextReader input, TextWriter output)
+    public Parser(Lexer lexer, Builtins builtins)
     {
         _lexer = lexer;
-        _functions = new Builtins(input, output).Functions;
+        _functions = builtins.Functions;
     }
 
     public void ParseProgram()

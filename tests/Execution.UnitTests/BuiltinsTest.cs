@@ -1,6 +1,5 @@
-using System.Globalization;
-
 using Lait.Execution;
+using Lait.TestDoubles;
 
 using Xunit;
 
@@ -65,7 +64,7 @@ public class BuiltinsTest
     [Fact]
     public void OnlySpecifiedFunctionsAreDefined()
     {
-        Builtins builtins = new(TextReader.Null, TextWriter.Null);
+        Builtins builtins = new(new FakeEnvironment());
 
         IEnumerable<string> names = builtins.Functions.Keys.Order(StringComparer.Ordinal);
 
@@ -76,7 +75,7 @@ public class BuiltinsTest
     [MemberData(nameof(FunctionsMatchSpecificationData))]
     public void FunctionsMatchSpecification(string name, string[] parameters, bool returnsValue)
     {
-        Builtins builtins = new(TextReader.Null, TextWriter.Null);
+        Builtins builtins = new(new FakeEnvironment());
 
         BuiltinFunction function = builtins.Functions[name];
 
@@ -89,7 +88,7 @@ public class BuiltinsTest
     [MemberData(nameof(NumericFunctionsReturnSpecifiedResultData))]
     public void NumericFunctionsReturnSpecifiedResult(string name, int[] arguments, int expected)
     {
-        Builtins builtins = new(TextReader.Null, TextWriter.Null);
+        Builtins builtins = new(new FakeEnvironment());
 
         int result = builtins.Functions[name].Invoke(arguments);
 
@@ -99,7 +98,7 @@ public class BuiltinsTest
     [Fact]
     public void AbsOfMinimumIntOverflows()
     {
-        Builtins builtins = new(TextReader.Null, TextWriter.Null);
+        Builtins builtins = new(new FakeEnvironment());
 
         Assert.Throws<OverflowException>(() => builtins.Functions["abs"].Invoke([int.MinValue]));
     }
@@ -108,19 +107,19 @@ public class BuiltinsTest
     [MemberData(nameof(PrintWritesNumberAndEndsLineData))]
     public void PrintWritesNumberAndEndsLine(int value, string expected)
     {
-        using StringWriter output = new(CultureInfo.InvariantCulture);
-        Builtins builtins = new(TextReader.Null, output);
+        FakeEnvironment environment = new();
+        Builtins builtins = new(environment);
 
         builtins.Functions["print"].Invoke([value]);
 
-        Assert.Equal(expected + Environment.NewLine, output.ToString());
+        Assert.Equal(expected + "\n", environment.Output);
     }
 
     [Fact]
     public void ReadIntReadsOneLinePerCall()
     {
-        using StringReader input = new(" \t+007\t \n-15\n9\n");
-        Builtins builtins = new(input, TextWriter.Null);
+        FakeEnvironment environment = new(" \t+007\t \n-15\n9\n");
+        Builtins builtins = new(environment);
         BuiltinFunction readInt = builtins.Functions["readInt"];
 
         int first = readInt.Invoke([]);
@@ -128,15 +127,14 @@ public class BuiltinsTest
 
         Assert.Equal(7, first);
         Assert.Equal(-15, second);
-        Assert.Equal("9", input.ReadLine());
+        Assert.Equal("9", environment.ReadLine());
     }
 
     [Theory]
     [MemberData(nameof(ReadIntReportsInvalidInputData))]
     public void ReadIntReportsInvalidInput(string inputText, string expectedMessage)
     {
-        using StringReader input = new(inputText);
-        Builtins builtins = new(input, TextWriter.Null);
+        Builtins builtins = new(new FakeEnvironment(inputText));
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(
             () => builtins.Functions["readInt"].Invoke([]));

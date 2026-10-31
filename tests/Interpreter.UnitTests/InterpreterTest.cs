@@ -1,7 +1,7 @@
-using System.Globalization;
-
+using Lait.Execution;
 using Lait.Lexemes;
 using Lait.Parsing;
+using Lait.TestDoubles;
 
 using Xunit;
 
@@ -170,7 +170,7 @@ public class InterpreterTest
     {
         string output = Run($"print({expression});");
 
-        Assert.Equal(expected + Environment.NewLine, output);
+        Assert.Equal(expected + "\n", output);
     }
 
     [Fact]
@@ -180,62 +180,62 @@ public class InterpreterTest
             "readInt(); print(readInt() - readInt()); print(min(readInt(), readInt()));",
             "99\n10\n3\n8\n2\n");
 
-        Assert.Equal($"7{Environment.NewLine}2{Environment.NewLine}", output);
+        Assert.Equal("7\n2\n", output);
     }
 
     [Fact]
     public void CommentsAndEmptyBodyAreAccepted()
     {
-        using StringWriter output = new(CultureInfo.InvariantCulture);
-        Parser parser = new(new Lexer("/* header */ func // comment\nmain(): void { /* body */ } // end"), TextReader.Null, output);
+        FakeEnvironment environment = new();
+        LaitInterpreter interpreter = new(environment);
 
-        parser.ParseProgram();
+        interpreter.Execute("/* header */ func // comment\nmain(): void { /* body */ } // end");
 
-        Assert.Equal(string.Empty, output.ToString());
+        Assert.Equal(string.Empty, environment.Output);
     }
 
     [Theory]
     [MemberData(nameof(InvalidStatementsAreRejectedData))]
     public void InvalidStatementsAreRejected(string body)
     {
-        Parser parser = new(new Lexer($"func main(): void {{ {body} }}"), TextReader.Null, TextWriter.Null);
+        LaitInterpreter interpreter = new(new FakeEnvironment());
 
-        Assert.Throws<FormatException>(() => parser.ParseProgram());
+        Assert.Throws<FormatException>(() => interpreter.Execute($"func main(): void {{ {body} }}"));
     }
 
     [Theory]
     [MemberData(nameof(ExactlyOneCompleteEntryPointIsRequiredData))]
     public void ExactlyOneCompleteEntryPointIsRequired(string source)
     {
-        Parser parser = new(new Lexer(source), TextReader.Null, TextWriter.Null);
+        LaitInterpreter interpreter = new(new FakeEnvironment());
 
-        Assert.Throws<FormatException>(() => parser.ParseProgram());
+        Assert.Throws<FormatException>(() => interpreter.Execute(source));
     }
 
     [Fact]
     public void SyntaxErrorPreservesPriorInputAndOutputAndStopsExecution()
     {
-        using StringReader input = new("7\n9\n");
-        using StringWriter output = new(CultureInfo.InvariantCulture);
-        Parser parser = new(new Lexer("func main(): void { print(readInt()); print(1) readInt(); }"), input, output);
+        FakeEnvironment environment = new("7\n9\n");
+        LaitInterpreter interpreter = new(environment);
 
-        Assert.Throws<FormatException>(() => parser.ParseProgram());
-        Assert.Equal("7" + Environment.NewLine, output.ToString());
-        Assert.Equal("9", input.ReadLine());
+        Assert.Throws<FormatException>(
+            () => interpreter.Execute("func main(): void { print(readInt()); print(1) readInt(); }"));
+        Assert.Equal("7\n", environment.Output);
+        Assert.Equal("9", environment.ReadLine());
     }
 
     [Theory]
     [MemberData(nameof(RuntimeErrorStopsLaterInstructionsAndPreservesOutputData))]
     public void RuntimeErrorStopsLaterInstructionsAndPreservesOutput(string expression, string expectedMessage)
     {
-        using StringReader input = new(string.Empty);
-        using StringWriter output = new(CultureInfo.InvariantCulture);
-        Parser parser = new(new Lexer($"func main(): void {{ print(42); {expression}; print(99); }}"), input, output);
+        FakeEnvironment environment = new();
+        LaitInterpreter interpreter = new(environment);
 
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => parser.ParseProgram());
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => interpreter.Execute($"func main(): void {{ print(42); {expression}; print(99); }}"));
 
         Assert.Equal(expectedMessage, error.Message);
-        Assert.Equal("42" + Environment.NewLine, output.ToString());
+        Assert.Equal("42\n", environment.Output);
     }
 
     [Theory]
@@ -244,7 +244,7 @@ public class InterpreterTest
     {
         string output = Run("print(readInt());", input);
 
-        Assert.Equal(expected + Environment.NewLine, output);
+        Assert.Equal(expected + "\n", output);
     }
 
     [Theory]
@@ -258,9 +258,11 @@ public class InterpreterTest
     public void ExcessiveNestingReportsErrorInsteadOfStackOverflow()
     {
         string expression = new string('(', 100000) + "1" + new string(')', 100000);
-        Parser parser = new(new Lexer($"func main(): void {{ {expression}; }}"), TextReader.Null, TextWriter.Null);
+        LaitInterpreter interpreter = new(new FakeEnvironment());
         Exception? error = null;
-        Thread thread = new(() => error = Record.Exception(() => parser.ParseProgram()), 256 * 1024);
+        Thread thread = new(
+            () => error = Record.Exception(() => interpreter.Execute($"func main(): void {{ {expression}; }}")),
+            256 * 1024);
 
         thread.Start();
         thread.Join();
@@ -285,20 +287,19 @@ public class InterpreterTest
     {
         string output = Run($"print({expression});");
 
-        Assert.Equal("1" + Environment.NewLine, output);
+        Assert.Equal("1\n", output);
     }
 
     [Fact]
     public void NestedArgumentsAreEvaluatedOnceInSourceOrder()
     {
-        using StringReader input = new("10\n3\n2\n99\n");
-        using StringWriter output = new(CultureInfo.InvariantCulture);
-        Parser parser = new(new Lexer("func main(): void { print(max(readInt() - readInt(), readInt())); }"), input, output);
+        FakeEnvironment environment = new("10\n3\n2\n99\n");
+        LaitInterpreter interpreter = new(environment);
 
-        parser.ParseProgram();
+        interpreter.Execute("func main(): void { print(max(readInt() - readInt(), readInt())); }");
 
-        Assert.Equal("7" + Environment.NewLine, output.ToString());
-        Assert.Equal("99", input.ReadLine());
+        Assert.Equal("7\n", environment.Output);
+        Assert.Equal("99", environment.ReadLine());
     }
 
     public static TheoryData<string> InterruptedPrintData()
@@ -318,26 +319,25 @@ public class InterpreterTest
     [MemberData(nameof(InterruptedPrintData))]
     public void IncompletePrintDoesNotProduceOutput(string body)
     {
-        using StringReader input = new("7\n");
-        using StringWriter output = new(CultureInfo.InvariantCulture);
-        Parser parser = new(new Lexer($"func main(): void {{ {body} }}"), input, output);
+        FakeEnvironment environment = new("7\n");
+        LaitInterpreter interpreter = new(environment);
 
-        Assert.Throws<FormatException>(() => parser.ParseProgram());
+        Assert.Throws<FormatException>(() => interpreter.Execute($"func main(): void {{ {body} }}"));
 
-        Assert.Equal(string.Empty, output.ToString());
+        Assert.Equal(string.Empty, environment.Output);
     }
 
     [Fact]
     public void RuntimeErrorDoesNotConsumeLaterInput()
     {
-        using StringReader input = new("9\n");
-        using StringWriter output = new(CultureInfo.InvariantCulture);
-        Parser parser = new(new Lexer("func main(): void { print(42); 1 / 0; readInt(); }"), input, output);
+        FakeEnvironment environment = new("9\n");
+        LaitInterpreter interpreter = new(environment);
 
-        Assert.Throws<InvalidOperationException>(() => parser.ParseProgram());
+        Assert.Throws<InvalidOperationException>(
+            () => interpreter.Execute("func main(): void { print(42); 1 / 0; readInt(); }"));
 
-        Assert.Equal("42" + Environment.NewLine, output.ToString());
-        Assert.Equal("9", input.ReadLine());
+        Assert.Equal("42\n", environment.Output);
+        Assert.Equal("9", environment.ReadLine());
     }
 
     [Fact]
@@ -351,7 +351,7 @@ public class InterpreterTest
     [Fact]
     public void ParserRejectsRepeatedExecution()
     {
-        Parser parser = new(new Lexer("func main(): void {}"), TextReader.Null, TextWriter.Null);
+        Parser parser = new(new Lexer("func main(): void {}"), new Builtins(new FakeEnvironment()));
         parser.ParseProgram();
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => parser.ParseProgram());
@@ -361,10 +361,9 @@ public class InterpreterTest
 
     private static string Run(string body, string inputText = "")
     {
-        using StringReader input = new(inputText);
-        using StringWriter output = new(CultureInfo.InvariantCulture);
-        Parser parser = new(new Lexer($"func main(): void {{ {body} }}"), input, output);
-        parser.ParseProgram();
-        return output.ToString();
+        FakeEnvironment environment = new(inputText);
+        LaitInterpreter interpreter = new(environment);
+        interpreter.Execute($"func main(): void {{ {body} }}");
+        return environment.Output;
     }
 }

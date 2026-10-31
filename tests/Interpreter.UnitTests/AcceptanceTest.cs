@@ -1,7 +1,5 @@
-using System.Globalization;
-
-using Lait.Lexemes;
-using Lait.Parsing;
+using Lait.Interpreter;
+using Lait.TestDoubles;
 
 using Xunit;
 
@@ -73,45 +71,39 @@ public class AcceptanceTest
     [MemberData(nameof(CompleteProgramsData))]
     public void CompleteProgramProducesExpectedOutput(string source, string inputText, string expectedOutput)
     {
-        using StringReader input = new(inputText);
-        using StringWriter output = new(CultureInfo.InvariantCulture);
-        output.NewLine = "\n";
-        Parser parser = new(new Lexer(source), input, output);
+        FakeEnvironment environment = new(inputText);
+        LaitInterpreter interpreter = new(environment);
 
-        parser.ParseProgram();
+        interpreter.Execute(source);
 
-        Assert.Equal(expectedOutput, output.ToString());
+        Assert.Equal(expectedOutput, environment.Output);
     }
 
     [Theory]
     [MemberData(nameof(InvalidProgramsData))]
     public void InvalidProgramStopsExecution(string source, string inputText, string expectedOutput)
     {
-        using StringReader input = new(inputText);
-        using StringWriter output = new(CultureInfo.InvariantCulture);
-        output.NewLine = "\n";
-        Parser parser = new(new Lexer(source), input, output);
+        FakeEnvironment environment = new(inputText);
+        LaitInterpreter interpreter = new(environment);
 
-        Exception? error = Record.Exception(() => parser.ParseProgram());
+        Exception? error = Record.Exception(() => interpreter.Execute(source));
 
         Assert.IsType<FormatException>(error);
-        Assert.Equal(expectedOutput, output.ToString());
+        Assert.Equal(expectedOutput, environment.Output);
     }
 
     [Theory]
     [MemberData(nameof(RuntimeFailuresData))]
     public void RuntimeFailurePreservesOutputAndStopsExecution(string expression, string inputText, string expectedMessage)
     {
-        using StringReader input = new(inputText);
-        using StringWriter output = new(CultureInfo.InvariantCulture);
-        output.NewLine = "\n";
+        FakeEnvironment environment = new(inputText);
+        LaitInterpreter interpreter = new(environment);
         string source = $"func main(): void {{ print(42); {expression}; print(99); }}";
-        Parser parser = new(new Lexer(source), input, output);
 
-        Exception? error = Record.Exception(() => parser.ParseProgram());
+        Exception? error = Record.Exception(() => interpreter.Execute(source));
 
         InvalidOperationException runtimeError = Assert.IsType<InvalidOperationException>(error);
         Assert.Equal(expectedMessage, runtimeError.Message);
-        Assert.Equal("42\n", output.ToString());
+        Assert.Equal("42\n", environment.Output);
     }
 }

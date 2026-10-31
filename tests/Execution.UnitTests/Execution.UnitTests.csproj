@@ -20,4 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Execution/Execution.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../TestDoubles/FakeEnvironment.cs" Link="TestDoubles/FakeEnvironment.cs" />
+  </ItemGroup>
 </Project>
