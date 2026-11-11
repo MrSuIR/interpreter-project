@@ -360,10 +360,7 @@ public class Parser
             throw SyntaxError($"Ожидался токен {type}.");
         }
 
-        if (type != TokenType.EndOfFile)
-        {
-            Advance();
-        }
+        Advance();
     }
 
     private void Advance()
