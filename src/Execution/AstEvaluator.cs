@@ -43,6 +43,10 @@ public class AstEvaluator : IAstVisitor
     public void Execute(ProgramNode program)
     {
         _values.Clear();
+        _frame = [];
+        _returning = false;
+        _returnValue = 0;
+
         try
         {
             program.Accept(this);

@@ -228,6 +228,47 @@ public class AstEvaluatorTest
     }
 
     [Fact]
+    public void ExecuteCanBeRepeatedAfterSuccessAndRuntimeError()
+    {
+        FakeEnvironment environment = new("2\n0\n4\n");
+        ProgramNode program = ProgramOf(
+            MainFunction(
+                Var("divisor", Call("getDivisor")),
+                Expr(Call("print", Binary(Number(10), BinaryOperation.Divide, Name("divisor")))),
+                Expr(Call("print", Number(20)))),
+            Function("getDivisor", [], true, Return(Call("readInt"))));
+        Builtins builtins = new(environment);
+        new SemanticsChecker(builtins.Functions).Check(program);
+        AstEvaluator evaluator = new();
+
+        evaluator.Execute(program);
+        Exception? error = Record.Exception(() => evaluator.Execute(program));
+        evaluator.Execute(program);
+
+        InvalidOperationException runtimeError = Assert.IsType<InvalidOperationException>(error);
+        Assert.Equal("Деление на ноль.", runtimeError.Message);
+        Assert.Equal("5\n20\n2\n20\n", environment.Output);
+        Assert.Null(environment.ReadLine());
+    }
+
+    [Fact]
+    public void ExecuteClearsStateLeftByDirectAstVisit()
+    {
+        FakeEnvironment environment = new();
+        ProgramNode program = MainProgram(
+            Expr(Call("print", Number(1))),
+            Expr(Call("print", Number(2))));
+        Builtins builtins = new(environment);
+        new SemanticsChecker(builtins.Functions).Check(program);
+        AstEvaluator evaluator = new();
+        Return(Number(42)).Accept(evaluator);
+
+        evaluator.Execute(program);
+
+        Assert.Equal("1\n2\n", environment.Output);
+    }
+
+    [Fact]
     public void ExcessiveNestingReportsErrorInsteadOfStackOverflow()
     {
         Expression expression = Number(1);
