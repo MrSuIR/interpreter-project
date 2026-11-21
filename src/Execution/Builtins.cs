@@ -1,5 +1,7 @@
 using System.Globalization;
 
+using Lait.Ast.Declarations;
+
 namespace Lait.Execution;
 
 /// <summary>
@@ -7,7 +9,7 @@ namespace Lait.Execution;
 /// </summary>
 public class Builtins
 {
-    public Builtins(TextReader input, TextWriter output)
+    public Builtins(IEnvironment environment)
     {
         List<BuiltinFunction> functions =
         [
@@ -17,8 +19,7 @@ public class Builtins
                 returnsValue: false,
                 arguments =>
                 {
-                    output.WriteLine(arguments[0].ToString(CultureInfo.InvariantCulture));
-                    output.Flush();
+                    environment.WriteLine(arguments[0].ToString(CultureInfo.InvariantCulture));
                     return 0;
                 }),
 
@@ -26,7 +27,7 @@ public class Builtins
                 "readInt", // readInt(): int - читает одну строку ввода и возвращает целое число
                 [],
                 returnsValue: true,
-                _ => ReadInteger(input)),
+                _ => ReadInteger(environment)),
 
             new(
                 "abs", // abs(value: int): int - возвращает модуль числа
@@ -55,9 +56,9 @@ public class Builtins
     /// </summary>
     public IReadOnlyDictionary<string, BuiltinFunction> Functions { get; }
 
-    private static int ReadInteger(TextReader input)
+    private static int ReadInteger(IEnvironment environment)
     {
-        string? line = input.ReadLine();
+        string? line = environment.ReadLine();
         if (line is null)
         {
             throw new InvalidOperationException("readInt(): достигнут конец ввода.");

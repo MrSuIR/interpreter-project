@@ -7,7 +7,7 @@ namespace Lait.Lexemes.UnitTests;
 public class LexerTest
 {
     [Fact]
-    public void Can_tokenize_source_file()
+    public void CanTokenizeSourceFile()
     {
         string path = Path.Combine(AppContext.BaseDirectory, "TestData", "program.lait");
         List<Token> expected =
@@ -38,7 +38,7 @@ public class LexerTest
     }
 
     [Fact]
-    public void From_file_throws_when_file_does_not_exist()
+    public void FromFileThrowsWhenFileDoesNotExist()
     {
         string path = Path.Combine(AppContext.BaseDirectory, "TestData", "missing.lait");
         Action action = () => Lexer.FromFile(path);
@@ -53,7 +53,7 @@ public class LexerTest
     [MemberData(nameof(GetSkipCommentsData))]
     [MemberData(nameof(GetTokenizeOperatorsAndPunctuationData))]
     [MemberData(nameof(GetTokenizeProgramFragmentsData))]
-    public void Can_tokenize_lexemes(string code, List<Token> expected)
+    public void CanTokenizeLexemes(string code, List<Token> expected)
     {
         List<Token> actual = Tokenize(code);
 
@@ -62,7 +62,7 @@ public class LexerTest
 
     [Theory]
     [MemberData(nameof(GetEndOfFileData))]
-    public void Parse_token_returns_end_of_file(string code, int tokenCount)
+    public void ParseTokenReturnsEndOfFile(string code, int tokenCount)
     {
         Lexer lexer = new(code);
 

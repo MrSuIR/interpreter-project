@@ -8,7 +8,7 @@ public class TextScannerTest
 {
     [Theory]
     [MemberData(nameof(GetPeekData))]
-    public void Peek_returns_character_at_offset(string input, int offset, char expected)
+    public void PeekReturnsCharacterAtOffset(string input, int offset, char expected)
     {
         TextScanner scanner = new(input);
 
@@ -19,7 +19,7 @@ public class TextScannerTest
 
     [Theory]
     [MemberData(nameof(GetRepeatedPeekData))]
-    public void Peek_does_not_change_position(string input, char expected)
+    public void PeekDoesNotChangePosition(string input, char expected)
     {
         TextScanner scanner = new(input);
 
@@ -32,7 +32,7 @@ public class TextScannerTest
 
     [Theory]
     [MemberData(nameof(GetAdvanceData))]
-    public void Advance_moves_position_forward(string input, int advanceCount, char expected)
+    public void AdvanceMovesPositionForward(string input, int advanceCount, char expected)
     {
         TextScanner scanner = new(input);
 
@@ -48,7 +48,7 @@ public class TextScannerTest
 
     [Theory]
     [MemberData(nameof(GetIsEndData))]
-    public void Is_end_reports_whether_input_is_finished(string input, int advanceCount, bool expected)
+    public void IsEndReportsWhetherInputIsFinished(string input, int advanceCount, bool expected)
     {
         TextScanner scanner = new(input);
 

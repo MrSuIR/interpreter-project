@@ -1,8 +1,5 @@
 using System.Text;
 
-using Lait.Lexemes;
-using Lait.Parsing;
-
 namespace Lait.Interpreter;
 
 public static class Program
@@ -19,8 +16,9 @@ public static class Program
 
         try
         {
-            Parser parser = new(Lexer.FromFile(args[0]), Console.In, Console.Out);
-            parser.ParseProgram();
+            string code = File.ReadAllText(args[0]);
+            LaitInterpreter interpreter = new(new ConsoleEnvironment());
+            interpreter.Execute(code);
             return 0;
         }
         catch (Exception exception) when (exception is FormatException

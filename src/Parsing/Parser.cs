@@ -1,28 +1,34 @@
 using System.Runtime.CompilerServices;
 
-using Lait.Execution;
+using Lait.Ast;
+using Lait.Ast.Declarations;
+using Lait.Ast.Expressions;
+using Lait.Ast.Statements;
 using Lait.Lexemes;
 
 namespace Lait.Parsing;
 
 /// <summary>
-/// Разбирает программу рекурсивным спуском и сразу выполняет её инструкции.
+/// Разбирает программу рекурсивным спуском и строит её AST.
 /// </summary>
 public class Parser
 {
     private readonly Lexer _lexer;
-    private readonly IReadOnlyDictionary<string, BuiltinFunction> _functions;
     private Token _current = new(TokenType.EndOfFile);
     private int _tokenNumber;
     private bool _started;
 
-    public Parser(Lexer lexer, TextReader input, TextWriter output)
+    public Parser(Lexer lexer)
     {
         _lexer = lexer;
-        _functions = new Builtins(input, output).Functions;
     }
 
-    public void ParseProgram()
+    /// <summary>
+    /// Разбирает программу.
+    /// Правило:
+    ///     program = function_declaration, { function_declaration } ;
+    /// </summary>
+    public ProgramNode ParseProgram()
     {
         if (_started)
         {
@@ -33,22 +39,13 @@ public class Parser
         try
         {
             Advance();
-            Expect(TokenType.Func);
-            ExpectIdentifier("main");
-            Expect(TokenType.OpenParenthesis);
-            Expect(TokenType.CloseParenthesis);
-            Expect(TokenType.Colon);
-            Expect(TokenType.Void);
-            ParseBlock();
-            Expect(TokenType.EndOfFile);
-        }
-        catch (OverflowException)
-        {
-            throw new InvalidOperationException("Результат операции выходит за диапазон int.");
-        }
-        catch (DivideByZeroException)
-        {
-            throw new InvalidOperationException("Деление на ноль.");
+            List<FunctionDeclaration> functions = [ParseFunctionDeclaration()];
+            while (_current.Type != TokenType.EndOfFile)
+            {
+                functions.Add(ParseFunctionDeclaration());
+            }
+
+            return new ProgramNode(functions);
         }
         catch (InsufficientExecutionStackException)
         {
@@ -56,8 +53,80 @@ public class Parser
         }
     }
 
-    private void ParseBlock()
+    /// <summary>
+    /// Разбирает объявление функции.
+    /// Правило:
+    ///     function_declaration = "func", ? Identifier ?, "(", [ parameters ], ")", ":", result_type, block ;
+    /// </summary>
+    private FunctionDeclaration ParseFunctionDeclaration()
     {
+        Expect(TokenType.Func);
+        string name = ExpectIdentifier();
+        Expect(TokenType.OpenParenthesis);
+        List<ParameterDeclaration> parameters = _current.Type == TokenType.CloseParenthesis ? [] : ParseParameters();
+        Expect(TokenType.CloseParenthesis);
+        Expect(TokenType.Colon);
+        bool returnsValue = ParseResultType();
+        BlockStatement body = ParseBlock();
+        return new FunctionDeclaration(name, parameters, returnsValue, body);
+    }
+
+    /// <summary>
+    /// Разбирает список параметров функции.
+    /// Правило:
+    ///     parameters = parameter, { ",", parameter } ;
+    /// </summary>
+    private List<ParameterDeclaration> ParseParameters()
+    {
+        List<ParameterDeclaration> parameters = [ParseParameter()];
+        while (_current.Type == TokenType.Comma)
+        {
+            Advance();
+            parameters.Add(ParseParameter());
+        }
+
+        return parameters;
+    }
+
+    /// <summary>
+    /// Разбирает параметр функции.
+    /// Правило:
+    ///     parameter = ? Identifier ?, ":", "int" ;
+    /// </summary>
+    private ParameterDeclaration ParseParameter()
+    {
+        string name = ExpectIdentifier();
+        Expect(TokenType.Colon);
+        Expect(TokenType.Int);
+        return new ParameterDeclaration(name);
+    }
+
+    /// <summary>
+    /// Разбирает тип результата функции и возвращает истину для int.
+    /// Правило:
+    ///     result_type = "int" | "void" ;
+    /// </summary>
+    private bool ParseResultType()
+    {
+        if (_current.Type is not (TokenType.Int or TokenType.Void))
+        {
+            throw SyntaxError("Ожидался тип результата int или void.");
+        }
+
+        bool returnsValue = _current.Type == TokenType.Int;
+        Advance();
+        return returnsValue;
+    }
+
+    /// <summary>
+    /// Разбирает блок инструкций.
+    /// Правило:
+    ///     block = "{", { statement }, "}" ;
+    /// </summary>
+    private BlockStatement ParseBlock()
+    {
+        RuntimeHelpers.EnsureSufficientExecutionStack();
+        List<Statement> statements = [];
         Expect(TokenType.OpenBrace);
         while (_current.Type != TokenType.CloseBrace)
         {
@@ -66,167 +135,222 @@ public class Parser
                 throw SyntaxError("Ожидалась закрывающая фигурная скобка.");
             }
 
-            ParseStatement();
+            statements.Add(ParseStatement());
         }
 
         Expect(TokenType.CloseBrace);
+        return new BlockStatement(statements);
     }
 
-    private void ParseStatement()
+    /// <summary>
+    /// Разбирает инструкцию; вид инструкции определяется по первой лексеме.
+    /// Правило:
+    ///     statement = variable_declaration | return_statement | block | expression_statement ;
+    /// </summary>
+    private Statement ParseStatement()
     {
-        BuiltinFunction? function = _current.Type == TokenType.Identifier ? FindFunction() : null;
-        if (function is { ReturnsValue: false })
+        return _current.Type switch
         {
-            List<int> arguments = ParseCallArguments(function);
-            if (_current.Type != TokenType.Semicolon)
-            {
-                throw SyntaxError("Ожидалась точка с запятой.");
-            }
+            TokenType.Int => ParseVariableDeclaration(),
+            TokenType.Return => ParseReturnStatement(),
+            TokenType.OpenBrace => ParseBlock(),
+            _ => ParseExpressionStatement(),
+        };
+    }
 
-            // Функцию без результата вызываем после проверки инструкции, до чтения следующей лексемы.
-            _ = function.Invoke(arguments);
-        }
-        else
-        {
-            _ = ParseExpression();
-        }
-
+    /// <summary>
+    /// Разбирает объявление переменной.
+    /// Правило:
+    ///     variable_declaration = "int", ? Identifier ?, "=", expression, ";" ;
+    /// </summary>
+    private VariableDeclarationStatement ParseVariableDeclaration()
+    {
+        Expect(TokenType.Int);
+        string name = ExpectIdentifier();
+        Expect(TokenType.Assign);
+        Expression initialValue = ParseExpression();
         Expect(TokenType.Semicolon);
+        return new VariableDeclarationStatement(new VariableDeclaration(name, initialValue));
     }
 
-    private int ParseExpression()
+    /// <summary>
+    /// Разбирает инструкцию возврата.
+    /// Правило:
+    ///     return_statement = "return", [ expression ], ";" ;
+    /// </summary>
+    private ReturnStatement ParseReturnStatement()
     {
-        return ParseAdditiveExpression();
+        Expect(TokenType.Return);
+        Expression? value = _current.Type == TokenType.Semicolon ? null : ParseExpression();
+        Expect(TokenType.Semicolon);
+        return new ReturnStatement(value);
     }
 
-    private int ParseAdditiveExpression()
+    /// <summary>
+    /// Разбирает инструкцию-выражение.
+    /// Правило:
+    ///     expression_statement = expression, ";" ;
+    /// </summary>
+    private ExpressionStatement ParseExpressionStatement()
     {
-        int value = ParseMultiplicativeExpression();
+        Expression expression = ParseExpression();
+        Expect(TokenType.Semicolon);
+        return new ExpressionStatement(expression);
+    }
+
+    /// <summary>
+    /// Разбирает выражение.
+    /// Правило:
+    ///     expression = assignment_expression ;
+    /// </summary>
+    private Expression ParseExpression()
+    {
+        return ParseAssignmentExpression();
+    }
+
+    /// <summary>
+    /// Разбирает правоассоциативное присваивание; то, что слева стоит переменная, проверяет семантика.
+    /// Правило:
+    ///     assignment_expression = additive_expression, [ "=", assignment_expression ] ;
+    /// </summary>
+    private Expression ParseAssignmentExpression()
+    {
+        RuntimeHelpers.EnsureSufficientExecutionStack();
+        Expression left = ParseAdditiveExpression();
+        if (_current.Type != TokenType.Assign)
+        {
+            return left;
+        }
+
+        Advance();
+        return new AssignmentExpression(left, ParseAssignmentExpression());
+    }
+
+    /// <summary>
+    /// Разбирает операторы сложения и вычитания.
+    /// Правило:
+    ///     additive_expression = multiplicative_expression, { ( "+" | "-" ), multiplicative_expression } ;
+    /// </summary>
+    private Expression ParseAdditiveExpression()
+    {
+        Expression expression = ParseMultiplicativeExpression();
         while (_current.Type is TokenType.Plus or TokenType.Minus)
         {
-            TokenType operation = _current.Type;
+            BinaryOperation operation = _current.Type == TokenType.Plus ? BinaryOperation.Add : BinaryOperation.Subtract;
             Advance();
-            int right = ParseMultiplicativeExpression();
-            value = operation == TokenType.Plus ? checked(value + right) : checked(value - right);
+            expression = new BinaryOperationExpression(expression, operation, ParseMultiplicativeExpression());
         }
 
-        return value;
+        return expression;
     }
 
-    private int ParseMultiplicativeExpression()
+    /// <summary>
+    /// Разбирает операторы умножения и деления.
+    /// Правило:
+    ///     multiplicative_expression = unary_expression, { ( "*" | "/" ), unary_expression } ;
+    /// </summary>
+    private Expression ParseMultiplicativeExpression()
     {
-        int value = ParseUnaryExpression();
+        Expression expression = ParseUnaryExpression();
         while (_current.Type is TokenType.Multiply or TokenType.Divide)
         {
-            TokenType operation = _current.Type;
+            BinaryOperation operation = _current.Type == TokenType.Multiply
+                ? BinaryOperation.Multiply
+                : BinaryOperation.Divide;
             Advance();
-            int right = ParseUnaryExpression();
-            value = operation == TokenType.Multiply ? checked(value * right) : checked(value / right);
+            expression = new BinaryOperationExpression(expression, operation, ParseUnaryExpression());
         }
 
-        return value;
+        return expression;
     }
 
-    private int ParseUnaryExpression()
+    /// <summary>
+    /// Разбирает унарный минус.
+    /// Правило:
+    ///     unary_expression = "-", unary_expression | primary_expression ;
+    /// </summary>
+    private Expression ParseUnaryExpression()
     {
         RuntimeHelpers.EnsureSufficientExecutionStack();
         if (_current.Type == TokenType.Minus)
         {
             Advance();
-            return checked(-ParseUnaryExpression());
+            return new UnaryMinusExpression(ParseUnaryExpression());
         }
 
         return ParsePrimaryExpression();
     }
 
-    private int ParsePrimaryExpression()
+    /// <summary>
+    /// Разбирает число, выражение в скобках, переменную или вызов функции.
+    /// Правило:
+    ///     primary_expression = ? IntLiteral ? | "(", expression, ")" | ? Identifier ?, [ argument_list ] ;
+    /// </summary>
+    private Expression ParsePrimaryExpression()
     {
         if (_current.Type == TokenType.IntLiteral)
         {
-            int value = _current.Value!.ToInt();
+            LiteralExpression literal = new(_current.Value!.ToInt());
             Advance();
-            return value;
+            return literal;
         }
 
         if (_current.Type == TokenType.OpenParenthesis)
         {
             Advance();
-            int value = ParseExpression();
+            Expression expression = ParseExpression();
             Expect(TokenType.CloseParenthesis);
-            return value;
+            return expression;
         }
 
         if (_current.Type == TokenType.Identifier)
         {
-            return ParseFunctionCall();
+            // Имя, после которого стоит "(", обозначает вызов функции, иначе - переменную.
+            string name = ExpectIdentifier();
+            return _current.Type == TokenType.OpenParenthesis
+                ? new FunctionCallExpression(name, ParseArgumentList())
+                : new VariableAccessExpression(name);
         }
 
-        throw SyntaxError("Ожидалось число, скобка или вызов функции.");
+        throw SyntaxError("Ожидалось число, скобка, переменная или вызов функции.");
     }
 
-    private int ParseFunctionCall()
+    /// <summary>
+    /// Разбирает список аргументов вызова функции.
+    /// Правило:
+    ///     argument_list = "(", [ expression, { ",", expression } ], ")" ;
+    /// </summary>
+    private List<Expression> ParseArgumentList()
     {
-        BuiltinFunction function = FindFunction();
-        if (!function.ReturnsValue)
-        {
-            throw SyntaxError($"Функция '{function.Name}' не возвращает значения и допускается только как инструкция.");
-        }
-
-        List<int> arguments = ParseCallArguments(function);
-        return function.Invoke(arguments);
-    }
-
-    private List<int> ParseCallArguments(BuiltinFunction function)
-    {
-        Advance();
+        List<Expression> arguments = [];
         Expect(TokenType.OpenParenthesis);
-        List<int> arguments = _current.Type == TokenType.CloseParenthesis ? [] : ParseArguments();
-        Expect(TokenType.CloseParenthesis);
-        if (arguments.Count != function.Parameters.Count)
+        if (_current.Type != TokenType.CloseParenthesis)
         {
-            throw SyntaxError(
-                $"Функция '{function.Name}' ожидает аргументов: {function.Parameters.Count}; получено: {arguments.Count}.");
-        }
-
-        return arguments;
-    }
-
-    private BuiltinFunction FindFunction()
-    {
-        string name = _current.Value!.ToString();
-        if (!_functions.TryGetValue(name, out BuiltinFunction? function))
-        {
-            throw SyntaxError($"Неизвестная функция '{name}'.");
-        }
-
-        return function;
-    }
-
-    private List<int> ParseArguments()
-    {
-        List<int> arguments = [ParseExpression()];
-        while (_current.Type == TokenType.Comma)
-        {
-            Advance();
             arguments.Add(ParseExpression());
+            while (_current.Type == TokenType.Comma)
+            {
+                Advance();
+                arguments.Add(ParseExpression());
+            }
         }
 
+        Expect(TokenType.CloseParenthesis);
         return arguments;
     }
 
-    private bool IsIdentifier(string name)
+    /// <summary>
+    /// Читает идентификатор и возвращает его имя.
+    /// </summary>
+    private string ExpectIdentifier()
     {
-        return _current.Type == TokenType.Identifier && _current.Value!.ToString() == name;
-    }
-
-    private void ExpectIdentifier(string name)
-    {
-        if (!IsIdentifier(name))
+        if (_current.Type != TokenType.Identifier)
         {
-            throw SyntaxError($"Ожидалось имя '{name}'.");
+            throw SyntaxError("Ожидался идентификатор.");
         }
 
+        string name = _current.Value!.ToString();
         Advance();
+        return name;
     }
 
     private void Expect(TokenType type)
@@ -236,10 +360,7 @@ public class Parser
             throw SyntaxError($"Ожидался токен {type}.");
         }
 
-        if (type != TokenType.EndOfFile)
-        {
-            Advance();
-        }
+        Advance();
     }
 
     private void Advance()

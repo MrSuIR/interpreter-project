@@ -8,7 +8,7 @@ public class TokenTest
 {
     [Theory]
     [MemberData(nameof(GetTokenEqualityData))]
-    public void Equals_compares_type_and_value(Token first, Token second, bool expected)
+    public void EqualsComparesTypeAndValue(Token first, Token second, bool expected)
     {
         bool actual = first.Equals(second);
 
@@ -17,7 +17,7 @@ public class TokenTest
 
     [Theory]
     [MemberData(nameof(GetTokenHashCodeData))]
-    public void Equal_tokens_have_equal_hash_codes(Token first, Token second)
+    public void EqualTokensHaveEqualHashCodes(Token first, Token second)
     {
         int firstHashCode = first.GetHashCode();
         int secondHashCode = second.GetHashCode();
@@ -27,7 +27,7 @@ public class TokenTest
 
     [Theory]
     [MemberData(nameof(GetTokenToStringData))]
-    public void To_string_formats_token(Token token, string expected)
+    public void ToStringFormatsToken(Token token, string expected)
     {
         string actual = token.ToString();
 
@@ -36,7 +36,7 @@ public class TokenTest
 
     [Theory]
     [MemberData(nameof(GetTokenValueToIntData))]
-    public void Token_value_returns_integer(TokenValue tokenValue, int expected)
+    public void TokenValueReturnsInteger(TokenValue tokenValue, int expected)
     {
         int actual = tokenValue.ToInt();
 
