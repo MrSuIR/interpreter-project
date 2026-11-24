@@ -3,7 +3,7 @@ using System.Globalization;
 namespace Lait.Lexemes;
 
 /// <summary>
-/// Представляет строковое или целочисленное значение токена.
+/// Представляет строковое, целочисленное или вещественное значение токена.
 /// </summary>
 public class TokenValue
 {
@@ -19,6 +19,11 @@ public class TokenValue
         _value = value;
     }
 
+    public TokenValue(double value)
+    {
+        _value = value;
+    }
+
     /// <summary>
     /// Возвращает значение токена в виде строки.
     /// </summary>
@@ -28,6 +33,7 @@ public class TokenValue
         {
             string stringValue => stringValue,
             int intValue => intValue.ToString(CultureInfo.InvariantCulture),
+            double floatValue => floatValue.ToString("R", CultureInfo.InvariantCulture),
             _ => throw new InvalidOperationException("Неизвестный тип значения токена."),
         };
     }
@@ -41,6 +47,18 @@ public class TokenValue
         {
             int intValue => intValue,
             _ => throw new InvalidOperationException("Значение токена не является целым числом."),
+        };
+    }
+
+    /// <summary>
+    /// Возвращает значение токена в виде числа с плавающей точкой.
+    /// </summary>
+    public double ToFloat()
+    {
+        return _value switch
+        {
+            double floatValue => floatValue,
+            _ => throw new InvalidOperationException("Значение токена не является числом с плавающей точкой."),
         };
     }
 

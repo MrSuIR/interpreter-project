@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Lexemes/Lexemes.csproj" />
+    <Project Path="src/Runtime/Runtime.csproj" />
     <Project Path="src/Ast/Ast.csproj" />
     <Project Path="src/Semantics/Semantics.csproj" />
     <Project Path="src/Execution/Execution.csproj" />

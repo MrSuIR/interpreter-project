@@ -30,6 +30,13 @@ public class ConsoleTest
             { "print(readInt());", "-2147483648\n", "-2147483648", 0 },
             { "print(readInt());", "42", "42", 0 },
             { new string('(', 100000) + "1" + new string(')', 100000) + ";", "", "", 1 },
+            { "printFloat(readFloat() / 4.0);", "10\n", "2.500000", 0 },
+            { "for (int i = 0; i < 3; i = i + 1) { if (i == 1) { break; } print(i); }", "", "0", 0 },
+            { "print(1); float x = 2.0; while (true) { x = x * x; }", "", "1", 1 },
+            { "print(1); print(1 % 0);", "", "1", 1 },
+            { "print(1); if (1) {}", "", "", 1 },
+            { "print(1); break;", "", "", 1 },
+            { "printFloat(readFloat());", "1,5\n", "", 1 },
         };
     }
 

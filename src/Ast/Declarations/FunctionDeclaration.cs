@@ -1,5 +1,7 @@
 using Lait.Ast.Statements;
 
+using ValueType = Lait.Runtime.ValueType;
+
 namespace Lait.Ast.Declarations;
 
 /// <summary>
@@ -10,19 +12,14 @@ public sealed class FunctionDeclaration : AbstractFunctionDeclaration
     public FunctionDeclaration(
         string name,
         IReadOnlyList<ParameterDeclaration> parameters,
-        bool returnsValue,
+        ValueType resultType,
         BlockStatement body)
-        : base(name, returnsValue)
+        : base(name, parameters, resultType)
     {
-        Parameters = parameters;
         Body = body;
     }
 
-    public IReadOnlyList<ParameterDeclaration> Parameters { get; }
-
     public BlockStatement Body { get; }
-
-    public override int ParameterCount => Parameters.Count;
 
     public override void Accept(IAstVisitor visitor)
     {

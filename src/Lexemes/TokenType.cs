@@ -6,8 +6,12 @@ namespace Lait.Lexemes;
 public enum TokenType
 {
     Bool,
+    Break,
+    Continue,
     Else,
     False,
+    Float,
+    For,
     Func,
     If,
     Int,
@@ -21,12 +25,14 @@ public enum TokenType
 
     Identifier,
     IntLiteral,
+    FloatLiteral,
     StringLiteral,
 
     Plus,
     Minus,
     Multiply,
     Divide,
+    Remainder,
     Assign,
     Equal,
     NotEqual,

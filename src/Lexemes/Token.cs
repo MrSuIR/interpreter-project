@@ -24,6 +24,12 @@ public class Token
         Value = new TokenValue(value);
     }
 
+    public Token(TokenType type, double value)
+    {
+        Type = type;
+        Value = new TokenValue(value);
+    }
+
     public TokenType Type { get; }
 
     public TokenValue? Value { get; }

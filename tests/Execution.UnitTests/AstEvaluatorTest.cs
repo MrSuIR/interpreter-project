@@ -8,6 +8,8 @@ using Xunit;
 
 using static Lait.TestDoubles.AstFactory;
 
+using ValueType = Lait.Runtime.ValueType;
+
 namespace Lait.Execution.UnitTests;
 
 public class AstEvaluatorTest
@@ -32,6 +34,68 @@ public class AstEvaluatorTest
             { Binary(Minus(Number(2147483647)), BinaryOperation.Subtract, Number(1)), "-2147483648" },
             { Call("abs", Minus(Number(8))), "8" },
             { Call("max", Call("abs", Minus(Number(8))), Call("min", Number(9), Number(5))), "8" },
+            { Binary(Number(7), BinaryOperation.Remainder, Number(3)), "1" },
+            { Binary(Minus(Number(7)), BinaryOperation.Remainder, Number(3)), "-1" },
+            { Binary(Number(7), BinaryOperation.Remainder, Minus(Number(3))), "1" },
+            { Call("toInt", Binary(Float(7.5), BinaryOperation.Multiply, Float(2.0))), "15" },
+        };
+    }
+
+    public static TheoryData<Expression, string> FloatExpressionsAreEvaluatedData()
+    {
+        return new()
+        {
+            { Float(2.5), "2.500000" },
+            { Binary(Float(1.5), BinaryOperation.Add, Float(2.25)), "3.750000" },
+            { Binary(Float(1.5), BinaryOperation.Subtract, Float(2.25)), "-0.750000" },
+            { Binary(Float(1.5), BinaryOperation.Multiply, Float(2.0)), "3.000000" },
+            { Binary(Float(7.0), BinaryOperation.Divide, Float(2.0)), "3.500000" },
+            { Binary(Float(1.0), BinaryOperation.Divide, Float(3.0)), "0.333333" },
+            { Minus(Float(2.5)), "-2.500000" },
+            { Minus(Float(0.0)), "-0.000000" },
+            { Call("toFloat", Number(7)), "7.000000" },
+        };
+    }
+
+    public static TheoryData<Expression, bool> BoolExpressionsAreEvaluatedData()
+    {
+        return new()
+        {
+            { Bool(true), true },
+            { Binary(Number(1), BinaryOperation.LessThan, Number(2)), true },
+            { Binary(Number(2), BinaryOperation.LessThanOrEqual, Number(2)), true },
+            { Binary(Number(1), BinaryOperation.GreaterThan, Number(2)), false },
+            { Binary(Number(1), BinaryOperation.GreaterThanOrEqual, Number(2)), false },
+            { Binary(Number(3), BinaryOperation.Equal, Number(3)), true },
+            { Binary(Number(3), BinaryOperation.NotEqual, Number(3)), false },
+            { Binary(Float(0.5), BinaryOperation.LessThan, Float(0.25)), false },
+            { Binary(Float(0.5), BinaryOperation.GreaterThanOrEqual, Float(0.5)), true },
+            { Binary(Float(0.0), BinaryOperation.Equal, Minus(Float(0.0))), true },
+            { Binary(Bool(true), BinaryOperation.NotEqual, Bool(false)), true },
+            { Binary(Bool(false), BinaryOperation.Equal, Bool(false)), true },
+            { Not(Bool(true)), false },
+            { Not(Not(Bool(true))), true },
+            { Binary(Bool(true), BinaryOperation.And, Bool(false)), false },
+            { Binary(Bool(true), BinaryOperation.And, Bool(true)), true },
+            { Binary(Bool(false), BinaryOperation.Or, Bool(true)), true },
+            { Binary(Bool(false), BinaryOperation.Or, Bool(false)), false },
+        };
+    }
+
+    public static TheoryData<Expression, string> StatementRuntimeErrorsData()
+    {
+        const string floatOverflow = "Результат операции выходит за диапазон float.";
+        return new()
+        {
+            { Binary(Number(1), BinaryOperation.Remainder, Number(0)), "Деление на ноль." },
+            { Binary(Number(int.MinValue), BinaryOperation.Remainder, Minus(Number(1))), Overflow },
+            { Binary(Float(1.0), BinaryOperation.Divide, Float(0.0)), "Деление на ноль." },
+            { Binary(Float(0.0), BinaryOperation.Divide, Minus(Float(0.0))), "Деление на ноль." },
+            { Binary(Float(1e308), BinaryOperation.Multiply, Float(10.0)), floatOverflow },
+            { Binary(Float(1e308), BinaryOperation.Add, Float(1e308)), floatOverflow },
+            { Binary(Minus(Float(1e308)), BinaryOperation.Subtract, Float(1e308)), floatOverflow },
+            { Binary(Float(1e308), BinaryOperation.Divide, Float(0.1)), floatOverflow },
+            { Call("toInt", Float(3e9)), "toInt(): число вне диапазона int." },
         };
     }
 
@@ -144,6 +208,136 @@ public class AstEvaluatorTest
                 "10\n3\n",
                 "7\n"
             },
+
+            // Ветви условной инструкции и цепочка else if.
+            {
+                ProgramOf(
+                    MainFunction(
+                        Expr(Call("print", Call("sign", Number(5)))),
+                        Expr(Call("print", Call("sign", Minus(Number(5))))),
+                        Expr(Call("print", Call("sign", Number(0)))),
+                        If(Bool(false), Block(Expr(Call("print", Number(9)))))),
+                    Function(
+                        "sign",
+                        ["x"],
+                        true,
+                        If(
+                            Binary(Name("x"), BinaryOperation.GreaterThan, Number(0)),
+                            Block(Return(Number(1))),
+                            If(Binary(Name("x"), BinaryOperation.LessThan, Number(0)), Block(Return(Minus(Number(1)))), Block(Return(Number(0))))))),
+                "",
+                "1\n-1\n0\n"
+            },
+
+            // Цикл while с continue и break.
+            {
+                MainProgram(
+                    Var("i", Number(0)),
+                    While(
+                        Bool(true),
+                        Expr(Assign(Name("i"), Binary(Name("i"), BinaryOperation.Add, Number(1)))),
+                        If(Binary(Name("i"), BinaryOperation.Equal, Number(2)), Block(Continue())),
+                        If(Binary(Name("i"), BinaryOperation.GreaterThan, Number(4)), Block(Break())),
+                        Expr(Call("print", Name("i")))),
+                    Expr(Call("print", Name("i")))),
+                "",
+                "1\n3\n4\n5\n"
+            },
+
+            // Цикл while с ложным условием не выполняет тело.
+            {
+                MainProgram(While(Bool(false), Expr(Call("print", Number(1)))), Expr(Call("print", Number(2)))),
+                "",
+                "2\n"
+            },
+
+            // После continue цикл for выполняет шаг; переменная тела создаётся заново на каждом шаге.
+            {
+                MainProgram(
+                    For(
+                        Var("i", Number(0)),
+                        Binary(Name("i"), BinaryOperation.LessThan, Number(5)),
+                        Assign(Name("i"), Binary(Name("i"), BinaryOperation.Add, Number(1))),
+                        Var("square", Binary(Name("i"), BinaryOperation.Multiply, Name("i"))),
+                        If(Binary(Binary(Name("i"), BinaryOperation.Remainder, Number(2)), BinaryOperation.Equal, Number(0)), Block(Continue())),
+                        Expr(Call("print", Name("square"))))),
+                "",
+                "1\n9\n"
+            },
+
+            // Цикл for с инициализатором-выражением и шагом - вызовом функции без результата.
+            {
+                MainProgram(
+                    Var("i", Number(0)),
+                    For(
+                        Expr(Assign(Name("i"), Number(1))),
+                        Binary(Name("i"), BinaryOperation.LessThanOrEqual, Number(3)),
+                        Call("print", Name("i")),
+                        Expr(Assign(Name("i"), Binary(Name("i"), BinaryOperation.Add, Number(1))))),
+                    Expr(Call("print", Name("i")))),
+                "",
+                "2\n3\n4\n4\n"
+            },
+
+            // break завершает только ближайший цикл.
+            {
+                MainProgram(
+                    For(
+                        Var("i", Number(1)),
+                        Binary(Name("i"), BinaryOperation.LessThanOrEqual, Number(2)),
+                        Assign(Name("i"), Binary(Name("i"), BinaryOperation.Add, Number(1))),
+                        While(Bool(true), Expr(Call("print", Name("i"))), Break()),
+                        Expr(Call("print", Binary(Name("i"), BinaryOperation.Multiply, Number(10)))))),
+                "",
+                "1\n10\n2\n20\n"
+            },
+
+            // return внутри цикла завершает функцию.
+            {
+                ProgramOf(
+                    MainFunction(Expr(Call("print", Call("firstDivisor", Number(91))))),
+                    Function(
+                        "firstDivisor",
+                        ["n"],
+                        true,
+                        For(
+                            Var("d", Number(2)),
+                            Binary(Name("d"), BinaryOperation.LessThan, Name("n")),
+                            Assign(Name("d"), Binary(Name("d"), BinaryOperation.Add, Number(1))),
+                            If(Binary(Binary(Name("n"), BinaryOperation.Remainder, Name("d")), BinaryOperation.Equal, Number(0)), Block(Return(Name("d"))))),
+                        Return(Name("n")))),
+                "",
+                "7\n"
+            },
+
+            // Логические операции вычисляются по короткой схеме.
+            {
+                ProgramOf(
+                    MainFunction(
+                        If(Binary(Bool(false), BinaryOperation.And, Call("touch", Bool(true))), Block(Expr(Call("print", Number(2))))),
+                        If(Binary(Bool(true), BinaryOperation.Or, Call("touch", Bool(false))), Block(Expr(Call("print", Number(3))))),
+                        If(Binary(Bool(true), BinaryOperation.And, Call("touch", Bool(true))), Block(Expr(Call("print", Number(4))))),
+                        If(Binary(Bool(false), BinaryOperation.Or, Call("touch", Bool(false))), Block(), Block(Expr(Call("print", Number(5)))))),
+                    TypedFunction(
+                        "touch",
+                        [Parameter("result", ValueType.Bool)],
+                        ValueType.Bool,
+                        Expr(Call("print", Number(1))),
+                        Return(Name("result")))),
+                "",
+                "3\n1\n4\n1\n5\n"
+            },
+
+            // Переменные float и bool, ввод и вывод float.
+            {
+                MainProgram(
+                    Var(ValueType.Float, "x", Call("readFloat")),
+                    Var(ValueType.Bool, "negative", Binary(Name("x"), BinaryOperation.LessThan, Float(0.0))),
+                    If(Name("negative"), Block(Expr(Assign(Name("x"), Minus(Name("x")))))),
+                    Expr(Call("printFloat", Name("x")))),
+                "-2.5\n",
+                "2.500000\n"
+            },
         };
     }
 
@@ -156,6 +350,41 @@ public class AstEvaluatorTest
         Run(MainProgram(Expr(Call("print", expression))), environment);
 
         Assert.Equal(expected + "\n", environment.Output);
+    }
+
+    [Theory]
+    [MemberData(nameof(FloatExpressionsAreEvaluatedData))]
+    public void FloatExpressionsAreEvaluated(Expression expression, string expected)
+    {
+        FakeEnvironment environment = new();
+
+        Run(MainProgram(Expr(Call("printFloat", expression))), environment);
+
+        Assert.Equal(expected + "\n", environment.Output);
+    }
+
+    [Theory]
+    [MemberData(nameof(BoolExpressionsAreEvaluatedData))]
+    public void BoolExpressionsAreEvaluated(Expression expression, bool expected)
+    {
+        FakeEnvironment environment = new();
+        ProgramNode program = MainProgram(If(expression, Block(Expr(Call("print", Number(1)))), Block(Expr(Call("print", Number(0))))));
+
+        Run(program, environment);
+
+        Assert.Equal(expected ? "1\n" : "0\n", environment.Output);
+    }
+
+    [Theory]
+    [MemberData(nameof(StatementRuntimeErrorsData))]
+    public void StatementRuntimeErrorsAreReported(Expression expression, string expectedMessage)
+    {
+        FakeEnvironment environment = new();
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => Run(MainProgram(Expr(expression)), environment));
+
+        Assert.Equal(expectedMessage, error.Message);
     }
 
     [Theory]

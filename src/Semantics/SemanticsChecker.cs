@@ -15,10 +15,13 @@ public class SemanticsChecker
 
     public SemanticsChecker(IReadOnlyDictionary<string, BuiltinFunction> builtins)
     {
+        // Типы проверяются последними: к этому моменту имена связаны с объявлениями,
+        //  а число аргументов и место вызовов функций без результата уже проверены.
         _passes =
         [
             new ResolveNamesPass(builtins),
             new CheckContextSensitiveRulesPass(),
+            new ResolveTypesPass(),
         ];
     }
 

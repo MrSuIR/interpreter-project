@@ -1,3 +1,7 @@
+using Lait.Runtime;
+
+using ValueType = Lait.Runtime.ValueType;
+
 namespace Lait.Ast.Declarations;
 
 /// <summary>
@@ -5,30 +9,22 @@ namespace Lait.Ast.Declarations;
 /// </summary>
 public sealed class BuiltinFunction : AbstractFunctionDeclaration
 {
-    private readonly Func<IReadOnlyList<int>, int> _implementation;
+    private readonly Func<IReadOnlyList<Value>, Value> _implementation;
 
     public BuiltinFunction(
         string name,
-        IReadOnlyList<string> parameters,
-        bool returnsValue,
-        Func<IReadOnlyList<int>, int> implementation)
-        : base(name, returnsValue)
+        IReadOnlyList<ParameterDeclaration> parameters,
+        ValueType resultType,
+        Func<IReadOnlyList<Value>, Value> implementation)
+        : base(name, parameters, resultType)
     {
-        Parameters = parameters;
         _implementation = implementation;
     }
 
     /// <summary>
-    /// Имена параметров функции; все параметры имеют тип int.
+    /// Выполняет функцию. Функция с типом void возвращает Value.Void.
     /// </summary>
-    public IReadOnlyList<string> Parameters { get; }
-
-    public override int ParameterCount => Parameters.Count;
-
-    /// <summary>
-    /// Выполняет функцию. Результат функции с типом void не используется.
-    /// </summary>
-    public int Invoke(IReadOnlyList<int> arguments)
+    public Value Invoke(IReadOnlyList<Value> arguments)
     {
         return _implementation(arguments);
     }

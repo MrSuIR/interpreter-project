@@ -15,6 +15,8 @@ public interface IAstVisitor
 
     void Visit(UnaryMinusExpression expression);
 
+    void Visit(LogicalNotExpression expression);
+
     void Visit(FunctionCallExpression expression);
 
     void Visit(VariableAccessExpression expression);
@@ -26,6 +28,16 @@ public interface IAstVisitor
     void Visit(BlockStatement statement);
 
     void Visit(VariableDeclarationStatement statement);
+
+    void Visit(IfElseStatement statement);
+
+    void Visit(WhileLoopStatement statement);
+
+    void Visit(ForLoopStatement statement);
+
+    void Visit(BreakLoopStatement statement);
+
+    void Visit(ContinueLoopStatement statement);
 
     void Visit(ReturnStatement statement);
 

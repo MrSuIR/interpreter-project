@@ -36,6 +36,10 @@ public class InterpreterTest
             { "max(-2147483647 - 1, 2147483647)", "2147483647" },
             { "min(4, 4) + max(-2, -2)", "2" },
             { "abs(min(-9, max(-5, -3)))", "9" },
+            { "7 % 3", "1" },
+            { "-7 % 3", "-1" },
+            { "7 % -3", "1" },
+            { "2 + 7 % 4 * 3", "11" },
         };
     }
 
@@ -55,7 +59,7 @@ public class InterpreterTest
             "print(print(1));",
             "unknown();",
             "+1;",
-            "1 % 2;",
+            "1.5 % 2.0;",
             "print(01);",
             "print(2147483648);",
             "print(1); /* unfinished",
@@ -304,6 +308,25 @@ public class InterpreterTest
     public void DeepExpressionsAreAccepted(string expression)
     {
         string output = Run($"print({expression});");
+
+        Assert.Equal("1\n", output);
+    }
+
+    public static TheoryData<string> DeepStatementsData()
+    {
+        return new()
+        {
+            string.Concat(Enumerable.Repeat("if (true) { ", 300)) + "print(1);" + new string('}', 300),
+            string.Concat(Enumerable.Repeat("while (true) { ", 300)) + "print(1);" + string.Concat(Enumerable.Repeat(" break; }", 300)),
+            "if (" + new string('!', 301) + "false) { print(1); }",
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(DeepStatementsData))]
+    public void DeepStatementsAreAccepted(string body)
+    {
+        string output = Run(body);
 
         Assert.Equal("1\n", output);
     }

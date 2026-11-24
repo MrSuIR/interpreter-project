@@ -1,3 +1,5 @@
+using ValueType = Lait.Runtime.ValueType;
+
 namespace Lait.Ast.Declarations;
 
 /// <summary>
@@ -5,21 +7,24 @@ namespace Lait.Ast.Declarations;
 /// </summary>
 public abstract class AbstractFunctionDeclaration : Declaration
 {
-    protected AbstractFunctionDeclaration(string name, bool returnsValue)
+    protected AbstractFunctionDeclaration(string name, IReadOnlyList<ParameterDeclaration> parameters, ValueType resultType)
     {
         Name = name;
-        ReturnsValue = returnsValue;
+        Parameters = parameters;
+        ResultType = resultType;
     }
 
     public string Name { get; }
 
-    /// <summary>
-    /// Истина, если функция возвращает int, и ложь, если её результат имеет тип void.
-    /// </summary>
-    public bool ReturnsValue { get; }
+    public IReadOnlyList<ParameterDeclaration> Parameters { get; }
 
     /// <summary>
-    /// Число параметров функции; все параметры имеют тип int.
+    /// Тип результата функции; Void, если функция не возвращает значения.
     /// </summary>
-    public abstract int ParameterCount { get; }
+    public ValueType ResultType { get; }
+
+    /// <summary>
+    /// Истина, если функция возвращает значение.
+    /// </summary>
+    public bool ReturnsValue => ResultType != ValueType.Void;
 }

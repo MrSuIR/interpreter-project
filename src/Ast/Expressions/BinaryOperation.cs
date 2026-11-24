@@ -1,7 +1,7 @@
 namespace Lait.Ast.Expressions;
 
 /// <summary>
-/// Бинарная арифметическая операция.
+/// Бинарная операция.
 /// </summary>
 public enum BinaryOperation
 {
@@ -21,7 +21,52 @@ public enum BinaryOperation
     Multiply,
 
     /// <summary>
-    /// Целочисленное деление.
+    /// Деление чисел; для int - целочисленное.
     /// </summary>
     Divide,
+
+    /// <summary>
+    /// Остаток от целочисленного деления.
+    /// </summary>
+    Remainder,
+
+    /// <summary>
+    /// Проверка равенства.
+    /// </summary>
+    Equal,
+
+    /// <summary>
+    /// Проверка неравенства.
+    /// </summary>
+    NotEqual,
+
+    /// <summary>
+    /// Сравнение "меньше".
+    /// </summary>
+    LessThan,
+
+    /// <summary>
+    /// Сравнение "меньше или равно".
+    /// </summary>
+    LessThanOrEqual,
+
+    /// <summary>
+    /// Сравнение "больше".
+    /// </summary>
+    GreaterThan,
+
+    /// <summary>
+    /// Сравнение "больше или равно".
+    /// </summary>
+    GreaterThanOrEqual,
+
+    /// <summary>
+    /// Логическое "и" с вычислением по короткой схеме.
+    /// </summary>
+    And,
+
+    /// <summary>
+    /// Логическое "или" с вычислением по короткой схеме.
+    /// </summary>
+    Or,
 }

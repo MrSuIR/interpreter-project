@@ -34,6 +34,24 @@ public class TokenTest
         Assert.Equal(expected, actual);
     }
 
+    [Fact]
+    public void TokenValueReturnsFloat()
+    {
+        TokenValue tokenValue = new(2.5);
+
+        double actual = tokenValue.ToFloat();
+
+        Assert.Equal(2.5, actual);
+    }
+
+    [Fact]
+    public void ToFloatThrowsForInteger()
+    {
+        TokenValue tokenValue = new(10);
+
+        Assert.Throws<InvalidOperationException>(() => tokenValue.ToFloat());
+    }
+
     [Theory]
     [MemberData(nameof(GetTokenValueToIntData))]
     public void TokenValueReturnsInteger(TokenValue tokenValue, int expected)
@@ -77,6 +95,16 @@ public class TokenTest
                 new Token(TokenType.IntLiteral, 10),
                 false
             },
+            {
+                new Token(TokenType.FloatLiteral, 1.5),
+                new Token(TokenType.FloatLiteral, 1.5),
+                true
+            },
+            {
+                new Token(TokenType.FloatLiteral, 1.0),
+                new Token(TokenType.IntLiteral, 1),
+                false
+            },
         };
     }
 
@@ -96,6 +124,10 @@ public class TokenTest
                 new Token(TokenType.IntLiteral, 10),
                 new Token(TokenType.IntLiteral, 10)
             },
+            {
+                new Token(TokenType.FloatLiteral, 0.5),
+                new Token(TokenType.FloatLiteral, 0.5)
+            },
         };
     }
 
@@ -114,6 +146,10 @@ public class TokenTest
             {
                 new Token(TokenType.IntLiteral, 10),
                 "IntLiteral (10)"
+            },
+            {
+                new Token(TokenType.FloatLiteral, 2.5),
+                "FloatLiteral (2.5)"
             },
         };
     }

@@ -49,6 +49,7 @@ public class LexerTest
     [Theory]
     [MemberData(nameof(GetTokenizeIdentifiersAndKeywordsData))]
     [MemberData(nameof(GetTokenizeIntLiteralsData))]
+    [MemberData(nameof(GetTokenizeFloatLiteralsData))]
     [MemberData(nameof(GetTokenizeStringLiteralsData))]
     [MemberData(nameof(GetSkipCommentsData))]
     [MemberData(nameof(GetTokenizeOperatorsAndPunctuationData))]
@@ -105,11 +106,15 @@ public class LexerTest
                 ]
             },
             {
-                "bool else false func if int new return string struct true void while",
+                "bool break continue else false float for func if int new return string struct true void while",
                 [
                     new Token(TokenType.Bool),
+                    new Token(TokenType.Break),
+                    new Token(TokenType.Continue),
                     new Token(TokenType.Else),
                     new Token(TokenType.False),
+                    new Token(TokenType.Float),
+                    new Token(TokenType.For),
                     new Token(TokenType.Func),
                     new Token(TokenType.If),
                     new Token(TokenType.Int),
@@ -245,6 +250,74 @@ public class LexerTest
         };
     }
 
+    public static TheoryData<string, List<Token>> GetTokenizeFloatLiteralsData()
+    {
+        return new TheoryData<string, List<Token>>
+        {
+            {
+                "0.5 3.14 100.0",
+                [
+                    new Token(TokenType.FloatLiteral, 0.5),
+                    new Token(TokenType.FloatLiteral, 3.14),
+                    new Token(TokenType.FloatLiteral, 100.0),
+                ]
+            },
+            {
+                "0.000 1.050 3000000000.25",
+                [
+                    new Token(TokenType.FloatLiteral, 0.0),
+                    new Token(TokenType.FloatLiteral, 1.05),
+                    new Token(TokenType.FloatLiteral, 3000000000.25),
+                ]
+            },
+            {
+                "-2.5",
+                [
+                    new Token(TokenType.Minus),
+                    new Token(TokenType.FloatLiteral, 2.5),
+                ]
+            },
+            {
+                "1. .5",
+                [
+                    new Token(TokenType.IntLiteral, 1),
+                    new Token(TokenType.Dot),
+                    new Token(TokenType.Dot),
+                    new Token(TokenType.IntLiteral, 5),
+                ]
+            },
+            {
+                "1.5.2",
+                [
+                    new Token(TokenType.FloatLiteral, 1.5),
+                    new Token(TokenType.Dot),
+                    new Token(TokenType.IntLiteral, 2),
+                ]
+            },
+            {
+                "1.x",
+                [
+                    new Token(TokenType.IntLiteral, 1),
+                    new Token(TokenType.Dot),
+                    new Token(TokenType.Identifier, "x"),
+                ]
+            },
+            {
+                "00.5 01.5",
+                [
+                    new Token(TokenType.Error, "00.5"),
+                    new Token(TokenType.Error, "01.5"),
+                ]
+            },
+            {
+                "1" + new string('0', 400) + ".0",
+                [
+                    new Token(TokenType.Error, "1" + new string('0', 400) + ".0"),
+                ]
+            },
+        };
+    }
+
     public static TheoryData<string, List<Token>> GetTokenizeStringLiteralsData()
     {
         return new TheoryData<string, List<Token>>
@@ -337,12 +410,13 @@ public class LexerTest
         return new TheoryData<string, List<Token>>
         {
             {
-                "+ - * /",
+                "+ - * / %",
                 [
                     new Token(TokenType.Plus),
                     new Token(TokenType.Minus),
                     new Token(TokenType.Multiply),
                     new Token(TokenType.Divide),
+                    new Token(TokenType.Remainder),
                 ]
             },
             {

@@ -4,6 +4,7 @@ using Lait.Ast;
 using Lait.Ast.Declarations;
 using Lait.Ast.Expressions;
 using Lait.Ast.Statements;
+using Lait.Runtime;
 
 namespace Lait.Semantics.Passes;
 
@@ -17,16 +18,27 @@ namespace Lait.Semantics.Passes;
 public sealed class CheckContextSensitiveRulesPass : AbstractPass
 {
     /// <summary>
+    /// Стек контекстов инструкций; используется для проверки break и continue.
+    /// </summary>
+    private readonly Stack<StatementContext> _statementContextStack = [];
+
+    /// <summary>
     /// Функция, тело которой проверяется сейчас.
     /// </summary>
     private FunctionDeclaration? _function;
+
+    private enum StatementContext
+    {
+        Default,
+        InsideLoop,
+    }
 
     public override void Visit(ProgramNode program)
     {
         // Повторные имена функций уже отклонены при разрешении имён.
         FunctionDeclaration main = program.Functions.FirstOrDefault(function => function.Name == "main")
             ?? throw new FormatException("В программе нет функции 'main'.");
-        if (main.ParameterCount != 0 || main.ReturnsValue)
+        if (main.Parameters.Count != 0 || main.ReturnsValue)
         {
             throw new FormatException("Функция 'main' должна быть объявлена как func main(): void.");
         }
@@ -36,13 +48,21 @@ public sealed class CheckContextSensitiveRulesPass : AbstractPass
 
     public override void Visit(FunctionDeclaration declaration)
     {
+        // Тело функции находится вне циклов, даже если функцию вызывают из цикла.
         _function = declaration;
-        base.Visit(declaration);
-
-        if (declaration.ReturnsValue && declaration.Body.Statements.LastOrDefault() is not ReturnStatement { Value: not null })
+        _statementContextStack.Push(StatementContext.Default);
+        try
         {
-            throw new FormatException(
-                $"Функция '{declaration.Name}' с результатом int должна заканчиваться return с выражением.");
+            base.Visit(declaration);
+        }
+        finally
+        {
+            _statementContextStack.Pop();
+        }
+
+        if (declaration.ReturnsValue && !AlwaysReturns(declaration.Body))
+        {
+            throw new FormatException($"Не каждый путь выполнения функции '{declaration.Name}' заканчивается return.");
         }
     }
 
@@ -56,10 +76,31 @@ public sealed class CheckContextSensitiveRulesPass : AbstractPass
 
         if (statement.Value is null && function.ReturnsValue)
         {
-            throw new FormatException($"Функция '{function.Name}' с результатом int должна возвращать значение.");
+            throw new FormatException(
+                $"Функция '{function.Name}' с результатом {function.ResultType.GetName()} должна возвращать значение.");
         }
 
         base.Visit(statement);
+    }
+
+    public override void Visit(WhileLoopStatement statement)
+    {
+        VisitInsideLoop(() => base.Visit(statement));
+    }
+
+    public override void Visit(ForLoopStatement statement)
+    {
+        VisitInsideLoop(() => base.Visit(statement));
+    }
+
+    public override void Visit(BreakLoopStatement statement)
+    {
+        CheckInsideLoop("break");
+    }
+
+    public override void Visit(ContinueLoopStatement statement)
+    {
+        CheckInsideLoop("continue");
     }
 
     public override void Visit(ExpressionStatement statement)
@@ -90,6 +131,47 @@ public sealed class CheckContextSensitiveRulesPass : AbstractPass
         base.Visit(expression);
     }
 
+    /// <summary>
+    /// Возвращает истину, если каждый путь выполнения инструкции заканчивается return.
+    /// Циклы не учитываются: их тело может не выполниться ни разу.
+    /// </summary>
+    private static bool AlwaysReturns(Statement statement)
+    {
+        RuntimeHelpers.EnsureSufficientExecutionStack();
+        return statement switch
+        {
+            ReturnStatement => true,
+            BlockStatement block => block.Statements.Any(AlwaysReturns),
+            IfElseStatement { ElseBranch: not null } ifElse =>
+                AlwaysReturns(ifElse.ThenBranch) && AlwaysReturns(ifElse.ElseBranch),
+            _ => false,
+        };
+    }
+
+    private void VisitInsideLoop(Action visit)
+    {
+        _statementContextStack.Push(StatementContext.InsideLoop);
+        try
+        {
+            visit();
+        }
+        finally
+        {
+            _statementContextStack.Pop();
+        }
+    }
+
+    /// <summary>
+    /// Проверяет, что break или continue находится внутри цикла той же функции.
+    /// </summary>
+    private void CheckInsideLoop(string keyword)
+    {
+        if (_statementContextStack.Peek() != StatementContext.InsideLoop)
+        {
+            throw new FormatException($"Инструкция {keyword} допускается только внутри цикла.");
+        }
+    }
+
     private void CheckCall(FunctionCallExpression call, bool requiresResult)
     {
         RuntimeHelpers.EnsureSufficientExecutionStack();
@@ -105,10 +187,10 @@ public sealed class CheckContextSensitiveRulesPass : AbstractPass
                 $"Функция '{function.Name}' не возвращает значения и допускается только как инструкция.");
         }
 
-        if (call.Arguments.Count != function.ParameterCount)
+        if (call.Arguments.Count != function.Parameters.Count)
         {
             throw new FormatException(
-                $"Функция '{function.Name}' ожидает аргументов: {function.ParameterCount}; получено: {call.Arguments.Count}.");
+                $"Функция '{function.Name}' ожидает аргументов: {function.Parameters.Count}; получено: {call.Arguments.Count}.");
         }
 
         foreach (Expression argument in call.Arguments)

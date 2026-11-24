@@ -1,12 +1,14 @@
+using ValueType = Lait.Runtime.ValueType;
+
 namespace Lait.Ast.Declarations;
 
 /// <summary>
-/// Объявление параметра функции типа int.
+/// Объявление параметра функции.
 /// </summary>
 public sealed class ParameterDeclaration : AbstractVariableDeclaration
 {
-    public ParameterDeclaration(string name)
-        : base(name)
+    public ParameterDeclaration(string name, ValueType type)
+        : base(name, type)
     {
     }
 

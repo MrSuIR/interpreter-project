@@ -84,6 +84,20 @@ public sealed class ResolveNamesPass : AbstractPass
         }
     }
 
+    public override void Visit(ForLoopStatement statement)
+    {
+        // Переменная из инициализатора принадлежит области цикла, а тело является вложенной областью.
+        _variables = new SymbolsTable(_variables);
+        try
+        {
+            base.Visit(statement);
+        }
+        finally
+        {
+            _variables = _variables.Parent!;
+        }
+    }
+
     public override void Visit(VariableDeclaration declaration)
     {
         // Инициализатор не видит объявляемую переменную.

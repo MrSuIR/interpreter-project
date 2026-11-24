@@ -1,16 +1,18 @@
+using Lait.Runtime;
+
 namespace Lait.Ast.Expressions;
 
 /// <summary>
-/// Целочисленный литерал.
+/// Литерал: целое число, число с плавающей точкой или булево значение.
 /// </summary>
 public sealed class LiteralExpression : Expression
 {
-    public LiteralExpression(int value)
+    public LiteralExpression(Value value)
     {
         Value = value;
     }
 
-    public int Value { get; }
+    public Value Value { get; }
 
     public override void Accept(IAstVisitor visitor)
     {

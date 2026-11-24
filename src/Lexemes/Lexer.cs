@@ -11,8 +11,12 @@ public class Lexer
     private static readonly Dictionary<string, TokenType> Keywords = new()
     {
         { "bool", TokenType.Bool },
+        { "break", TokenType.Break },
+        { "continue", TokenType.Continue },
         { "else", TokenType.Else },
         { "false", TokenType.False },
+        { "float", TokenType.Float },
+        { "for", TokenType.For },
         { "func", TokenType.Func },
         { "if", TokenType.If },
         { "int", TokenType.Int },
@@ -73,7 +77,7 @@ public class Lexer
 
         if (char.IsAsciiDigit(current))
         {
-            return ParseIntLiteral();
+            return ParseNumberLiteral();
         }
 
         if (current == '"')
@@ -99,6 +103,10 @@ public class Lexer
             case '/':
                 _scanner.Advance();
                 return new Token(TokenType.Divide);
+
+            case '%':
+                _scanner.Advance();
+                return new Token(TokenType.Remainder);
 
             case '=':
                 _scanner.Advance();
@@ -275,9 +283,46 @@ public class Lexer
     }
 
     /// <summary>
-    /// Разбирает целочисленный литерал.
+    /// Разбирает целочисленный литерал или литерал с плавающей точкой.
     /// </summary>
-    private Token ParseIntLiteral()
+    private Token ParseNumberLiteral()
+    {
+        string integerPart = ReadDigits();
+
+        // Точка входит в литерал, только если за ней следует цифра.
+        bool isFloat = _scanner.Peek() == '.' && char.IsAsciiDigit(_scanner.Peek(1));
+        string text = integerPart;
+        if (isFloat)
+        {
+            _scanner.Advance();
+            text = integerPart + "." + ReadDigits();
+        }
+
+        if (integerPart.Length > 1 && integerPart[0] == '0')
+        {
+            return new Token(TokenType.Error, text);
+        }
+
+        if (isFloat)
+        {
+            double floatValue = double.Parse(text, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture);
+            return double.IsFinite(floatValue)
+                ? new Token(TokenType.FloatLiteral, floatValue)
+                : new Token(TokenType.Error, text);
+        }
+
+        if (int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out int value))
+        {
+            return new Token(TokenType.IntLiteral, value);
+        }
+
+        return new Token(TokenType.Error, text);
+    }
+
+    /// <summary>
+    /// Читает последовательность десятичных цифр.
+    /// </summary>
+    private string ReadDigits()
     {
         StringBuilder digitsBuilder = new();
 
@@ -288,18 +333,7 @@ public class Lexer
             _scanner.Advance();
         }
 
-        string digits = digitsBuilder.ToString();
-        if (digits.Length > 1 && digits[0] == '0')
-        {
-            return new Token(TokenType.Error, digits);
-        }
-
-        if (int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out int value))
-        {
-            return new Token(TokenType.IntLiteral, value);
-        }
-
-        return new Token(TokenType.Error, digits);
+        return digitsBuilder.ToString();
     }
 
     /// <summary>

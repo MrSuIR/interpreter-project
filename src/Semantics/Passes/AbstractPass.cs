@@ -29,6 +29,12 @@ public abstract class AbstractPass : IAstVisitor
         expression.Operand.Accept(this);
     }
 
+    public virtual void Visit(LogicalNotExpression expression)
+    {
+        RuntimeHelpers.EnsureSufficientExecutionStack();
+        expression.Operand.Accept(this);
+    }
+
     public virtual void Visit(FunctionCallExpression expression)
     {
         RuntimeHelpers.EnsureSufficientExecutionStack();
@@ -66,6 +72,38 @@ public abstract class AbstractPass : IAstVisitor
     public virtual void Visit(VariableDeclarationStatement statement)
     {
         statement.Declaration.Accept(this);
+    }
+
+    public virtual void Visit(IfElseStatement statement)
+    {
+        RuntimeHelpers.EnsureSufficientExecutionStack();
+        statement.Condition.Accept(this);
+        statement.ThenBranch.Accept(this);
+        statement.ElseBranch?.Accept(this);
+    }
+
+    public virtual void Visit(WhileLoopStatement statement)
+    {
+        RuntimeHelpers.EnsureSufficientExecutionStack();
+        statement.Condition.Accept(this);
+        statement.Body.Accept(this);
+    }
+
+    public virtual void Visit(ForLoopStatement statement)
+    {
+        RuntimeHelpers.EnsureSufficientExecutionStack();
+        statement.Initializer.Accept(this);
+        statement.Condition.Accept(this);
+        statement.Step.Accept(this);
+        statement.Body.Accept(this);
+    }
+
+    public virtual void Visit(BreakLoopStatement statement)
+    {
+    }
+
+    public virtual void Visit(ContinueLoopStatement statement)
+    {
     }
 
     public virtual void Visit(ReturnStatement statement)

@@ -4,6 +4,9 @@ using Lait.Ast;
 using Lait.Ast.Declarations;
 using Lait.Ast.Expressions;
 using Lait.Ast.Statements;
+using Lait.Runtime;
+
+using ValueType = Lait.Runtime.ValueType;
 
 namespace Lait.Execution;
 
@@ -16,26 +19,41 @@ namespace Lait.Execution;
 /// <exception cref="InvalidOperationException">Бросается при ошибке в процессе вычислений.</exception>
 public class AstEvaluator : IAstVisitor
 {
+    private const string FloatOutOfRange = "Результат операции выходит за диапазон float.";
+
     /// <summary>
     /// В стек временно складываются результаты вычисления операндов текущей операции.
     /// </summary>
-    private readonly Stack<int> _values = [];
+    private readonly Stack<Value> _values = [];
 
     /// <summary>
     /// Значения параметров и переменных выполняемого вызова функции.
     /// Объявления уникальны, поэтому перекрытые имена не смешиваются.
     /// </summary>
-    private Dictionary<AbstractVariableDeclaration, int> _frame = [];
+    private Dictionary<AbstractVariableDeclaration, Value> _frame = [];
 
     /// <summary>
-    /// Истина после выполнения return, пока не завершится текущий вызов функции.
+    /// Переход, начатый инструкцией return, break или continue и ещё не завершённый.
     /// </summary>
-    private bool _returning;
+    private Jump _jump;
 
     /// <summary>
     /// Значение, переданное в return.
     /// </summary>
-    private int _returnValue;
+    private Value _returnValue = Value.Void;
+
+    /// <summary>
+    /// Переходы, прерывающие последовательное выполнение инструкций.
+    /// Блок прекращает выполнение, пока переход не завершён: return завершает вызов функции,
+    ///  а break и continue - шаг ближайшего цикла.
+    /// </summary>
+    private enum Jump
+    {
+        None,
+        Return,
+        Break,
+        Continue,
+    }
 
     /// <summary>
     /// Выполняет программу, вызывая функцию main.
@@ -44,8 +62,8 @@ public class AstEvaluator : IAstVisitor
     {
         _values.Clear();
         _frame = [];
-        _returning = false;
-        _returnValue = 0;
+        _jump = Jump.None;
+        _returnValue = Value.Void;
 
         try
         {
@@ -74,19 +92,34 @@ public class AstEvaluator : IAstVisitor
     {
         RuntimeHelpers.EnsureSufficientExecutionStack();
 
+        // Логические операции вычисляются по короткой схеме: правый операнд может не понадобиться.
+        if (expression.Operation is BinaryOperation.And or BinaryOperation.Or)
+        {
+            expression.Left.Accept(this);
+            bool left = _values.Peek().AsBool();
+            if (left == (expression.Operation == BinaryOperation.Or))
+            {
+                return;
+            }
+
+            _values.Pop();
+            expression.Right.Accept(this);
+            return;
+        }
+
         // Левый операнд вычисляется раньше правого, поэтому правый лежит на вершине стека.
         expression.Left.Accept(this);
         expression.Right.Accept(this);
-        int right = _values.Pop();
-        int left = _values.Pop();
+        Value rightValue = _values.Pop();
+        Value leftValue = _values.Pop();
 
         _values.Push(expression.Operation switch
         {
-            BinaryOperation.Add => checked(left + right),
-            BinaryOperation.Subtract => checked(left - right),
-            BinaryOperation.Multiply => checked(left * right),
-            BinaryOperation.Divide => checked(left / right),
-            _ => throw new InvalidOperationException($"Неизвестная бинарная операция {expression.Operation}."),
+            BinaryOperation.Equal => new Value(leftValue.Equals(rightValue)),
+            BinaryOperation.NotEqual => new Value(!leftValue.Equals(rightValue)),
+            _ when leftValue.GetValueType() == ValueType.Float =>
+                ApplyFloatOperation(expression.Operation, leftValue.AsFloat(), rightValue.AsFloat()),
+            _ => ApplyIntOperation(expression.Operation, leftValue.AsInt(), rightValue.AsInt()),
         });
     }
 
@@ -95,7 +128,18 @@ public class AstEvaluator : IAstVisitor
         RuntimeHelpers.EnsureSufficientExecutionStack();
 
         expression.Operand.Accept(this);
-        _values.Push(checked(-_values.Pop()));
+        Value operand = _values.Pop();
+        _values.Push(operand.GetValueType() == ValueType.Float
+            ? new Value(-operand.AsFloat())
+            : new Value(checked(-operand.AsInt())));
+    }
+
+    public void Visit(LogicalNotExpression expression)
+    {
+        RuntimeHelpers.EnsureSufficientExecutionStack();
+
+        expression.Operand.Accept(this);
+        _values.Push(new Value(!_values.Pop().AsBool()));
     }
 
     public void Visit(FunctionCallExpression expression)
@@ -103,14 +147,14 @@ public class AstEvaluator : IAstVisitor
         RuntimeHelpers.EnsureSufficientExecutionStack();
 
         // Вычисляем аргументы функции слева направо.
-        List<int> arguments = [];
+        List<Value> arguments = [];
         foreach (Expression argument in expression.Arguments)
         {
             argument.Accept(this);
             arguments.Add(_values.Pop());
         }
 
-        int result = expression.Function switch
+        Value result = expression.Function switch
         {
             BuiltinFunction builtin => builtin.Invoke(arguments),
             FunctionDeclaration function => InvokeFunction(function, arguments),
@@ -160,7 +204,7 @@ public class AstEvaluator : IAstVisitor
         foreach (Statement nested in statement.Statements)
         {
             nested.Accept(this);
-            if (_returning)
+            if (_jump != Jump.None)
             {
                 return;
             }
@@ -172,6 +216,59 @@ public class AstEvaluator : IAstVisitor
         statement.Declaration.Accept(this);
     }
 
+    public void Visit(IfElseStatement statement)
+    {
+        RuntimeHelpers.EnsureSufficientExecutionStack();
+        if (EvaluateCondition(statement.Condition))
+        {
+            statement.ThenBranch.Accept(this);
+        }
+        else
+        {
+            statement.ElseBranch?.Accept(this);
+        }
+    }
+
+    public void Visit(WhileLoopStatement statement)
+    {
+        RuntimeHelpers.EnsureSufficientExecutionStack();
+        while (EvaluateCondition(statement.Condition))
+        {
+            statement.Body.Accept(this);
+            if (CompleteLoopIteration())
+            {
+                return;
+            }
+        }
+    }
+
+    public void Visit(ForLoopStatement statement)
+    {
+        RuntimeHelpers.EnsureSufficientExecutionStack();
+        statement.Initializer.Accept(this);
+        while (EvaluateCondition(statement.Condition))
+        {
+            statement.Body.Accept(this);
+            if (CompleteLoopIteration())
+            {
+                return;
+            }
+
+            // После continue цикл for тоже выполняет шаг.
+            statement.Step.Accept(this);
+        }
+    }
+
+    public void Visit(BreakLoopStatement statement)
+    {
+        _jump = Jump.Break;
+    }
+
+    public void Visit(ContinueLoopStatement statement)
+    {
+        _jump = Jump.Continue;
+    }
+
     public void Visit(ReturnStatement statement)
     {
         if (statement.Value is not null)
@@ -180,7 +277,7 @@ public class AstEvaluator : IAstVisitor
             _returnValue = _values.Pop();
         }
 
-        _returning = true;
+        _jump = Jump.Return;
     }
 
     public void Visit(FunctionDeclaration declaration)
@@ -206,18 +303,97 @@ public class AstEvaluator : IAstVisitor
     }
 
     /// <summary>
+    /// Выполняет арифметическую операцию или сравнение двух чисел типа int.
+    /// </summary>
+    private static Value ApplyIntOperation(BinaryOperation operation, int left, int right)
+    {
+        return operation switch
+        {
+            BinaryOperation.Add => new Value(checked(left + right)),
+            BinaryOperation.Subtract => new Value(checked(left - right)),
+            BinaryOperation.Multiply => new Value(checked(left * right)),
+            BinaryOperation.Divide => new Value(checked(left / right)),
+
+            // Деление int.MinValue на -1 с остатком в .NET бросает OverflowException, как и деление.
+            BinaryOperation.Remainder => new Value(checked(left % right)),
+            BinaryOperation.LessThan => new Value(left < right),
+            BinaryOperation.LessThanOrEqual => new Value(left <= right),
+            BinaryOperation.GreaterThan => new Value(left > right),
+            BinaryOperation.GreaterThanOrEqual => new Value(left >= right),
+            _ => throw new InvalidOperationException($"Неизвестная операция {operation} для int."),
+        };
+    }
+
+    /// <summary>
+    /// Выполняет арифметическую операцию или сравнение двух чисел типа float.
+    /// </summary>
+    private static Value ApplyFloatOperation(BinaryOperation operation, double left, double right)
+    {
+        if (operation == BinaryOperation.Divide && right == 0.0)
+        {
+            throw new DivideByZeroException();
+        }
+
+        return operation switch
+        {
+            BinaryOperation.Add => FiniteFloat(left + right),
+            BinaryOperation.Subtract => FiniteFloat(left - right),
+            BinaryOperation.Multiply => FiniteFloat(left * right),
+            BinaryOperation.Divide => FiniteFloat(left / right),
+            BinaryOperation.LessThan => new Value(left < right),
+            BinaryOperation.LessThanOrEqual => new Value(left <= right),
+            BinaryOperation.GreaterThan => new Value(left > right),
+            BinaryOperation.GreaterThanOrEqual => new Value(left >= right),
+            _ => throw new InvalidOperationException($"Неизвестная операция {operation} для float."),
+        };
+    }
+
+    /// <summary>
+    /// Проверяет, что результат операции над float является конечным числом.
+    /// </summary>
+    private static Value FiniteFloat(double result)
+    {
+        return double.IsFinite(result) ? new Value(result) : throw new InvalidOperationException(FloatOutOfRange);
+    }
+
+    private bool EvaluateCondition(Expression condition)
+    {
+        condition.Accept(this);
+        return _values.Pop().AsBool();
+    }
+
+    /// <summary>
+    /// Завершает шаг цикла после выполнения тела и возвращает истину, если цикл нужно прекратить.
+    /// </summary>
+    private bool CompleteLoopIteration()
+    {
+        switch (_jump)
+        {
+            case Jump.Break:
+                _jump = Jump.None;
+                return true;
+            case Jump.Continue:
+                _jump = Jump.None;
+                return false;
+            default:
+                // return прекращает цикл и продолжает выход из функции.
+                return _jump == Jump.Return;
+        }
+    }
+
+    /// <summary>
     /// Выполняет функцию программы в новом кадре вызова и возвращает её результат.
     /// </summary>
-    private int InvokeFunction(FunctionDeclaration function, IReadOnlyList<int> arguments)
+    private Value InvokeFunction(FunctionDeclaration function, IReadOnlyList<Value> arguments)
     {
         // Параметры передаются по значению.
-        Dictionary<AbstractVariableDeclaration, int> frame = [];
+        Dictionary<AbstractVariableDeclaration, Value> frame = [];
         for (int index = 0; index < function.Parameters.Count; index++)
         {
             frame[function.Parameters[index]] = arguments[index];
         }
 
-        Dictionary<AbstractVariableDeclaration, int> callerFrame = _frame;
+        Dictionary<AbstractVariableDeclaration, Value> callerFrame = _frame;
         _frame = frame;
         try
         {
@@ -228,9 +404,9 @@ public class AstEvaluator : IAstVisitor
             _frame = callerFrame;
         }
 
-        int result = _returnValue;
-        _returning = false;
-        _returnValue = 0;
+        Value result = _returnValue;
+        _jump = Jump.None;
+        _returnValue = Value.Void;
         return result;
     }
 }
